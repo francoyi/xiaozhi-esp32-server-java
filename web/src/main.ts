@@ -13,18 +13,23 @@ import { setupRouterGuards } from './router/guards'
 import { setupErrorHandler } from './utils/errorHandler'
 import { i18n } from './locales'
 
+console.log('[BOOT] main.ts start')
+
 const app = createApp(App)
 
-// 1. 设置全局错误处理
-setupErrorHandler(app)
+console.log('[BOOT] after createApp')
 
-// 2. 使用插件
+setupErrorHandler(app)
+console.log('[BOOT] after setupErrorHandler')
+
 app.use(createPinia())
 app.use(router)
 app.use(Antd)
 app.use(i18n)
+console.log('[BOOT] after plugins')
 
-// 3. 设置路由守卫（登录验证、页面标题、进度条）
 setupRouterGuards(router)
+console.log('[BOOT] after guards')
 
 app.mount('#app')
+console.log('[BOOT] mounted')
