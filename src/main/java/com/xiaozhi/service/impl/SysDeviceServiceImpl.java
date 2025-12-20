@@ -19,6 +19,7 @@ import jakarta.annotation.Resource;
 import org.apache.ibatis.javassist.NotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.context.ApplicationContext;
@@ -123,7 +124,7 @@ public class SysDeviceServiceImpl extends BaseServiceImpl implements SysDeviceSe
      */
     @Override
     @Transactional
-    @CacheEvict(value = CACHE_NAME, key = "#device.deviceId.replace(\":\", \"-\")")
+    @CacheEvict(value = CACHE_NAME, key = "#device.deviceId.replace(':','-')", condition = "#device.deviceId != null")
     public int delete(SysDevice device) {
         int row = deviceMapper.delete(device);
         if (row > 0) {
@@ -226,22 +227,24 @@ public class SysDeviceServiceImpl extends BaseServiceImpl implements SysDeviceSe
      * @return
      */
     @Override
-    @CacheEvict(value = CACHE_NAME, key = "#device.deviceId.replace(\":\", \"-\")")
+    @Caching(evict = {
+            @CacheEvict(value = CACHE_NAME, key = "#device.deviceId.replace(':','-')", condition = "#device.deviceId != null"),
+            @CacheEvict(value = CACHE_NAME, allEntries = true, condition = "#device.deviceId == null")
+    })
     public int update(SysDevice device) {
         int rows = deviceMapper.update(device);
-        // 更新设备信息后清空记忆缓存并重新注册设备信息
-        if(device.getDeviceId() != null){
+
+        if (device != null && device.getDeviceId() != null) {
             device = deviceMapper.selectDeviceById(device.getDeviceId());
-        }
-        ChatSession session = null;
-        if (device != null) {
-            // Use ApplicationContext to get SessionManager to avoid circular dependency
+
+            // 只有有 deviceId 时才去更新 session
             SessionManager sessionManager = applicationContext.getBean(SessionManager.class);
-            session = sessionManager.getSessionByDeviceId(device.getDeviceId());
+            ChatSession session = sessionManager.getSessionByDeviceId(device.getDeviceId());
+            if (session != null) {
+                session.setSysDevice(device);
+            }
         }
-        if (session != null) {
-            session.setSysDevice(device);
-        }
+
         return rows;
     }
 
