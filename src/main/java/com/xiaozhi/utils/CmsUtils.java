@@ -2,6 +2,7 @@ package com.xiaozhi.utils;
 
 import com.xiaozhi.communication.server.websocket.WebSocketConfig;
 import com.xiaozhi.entity.SysUser;
+import cn.dev33.satoken.stp.StpUtil;
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -74,6 +75,15 @@ public class CmsUtils {
         if (user != null) {
             return user.getUserId();
         } else {
+            // 兜底：部分接口链路未成功注入 SysUser（request attribute），
+            // 这时直接从 Sa-Token 获取登录ID（项目约定为 sys_user.userId:int）。
+            try {
+                if (StpUtil.isLogin()) {
+                    return StpUtil.getLoginIdAsInt();
+                }
+            } catch (Exception ignore) {
+                // ignore
+            }
             return null;
         }
     }

@@ -15,6 +15,8 @@ import com.xiaozhi.service.SysRoleService;
 import com.xiaozhi.utils.CmsUtils;
 import com.xiaozhi.utils.DtoConverter;
 
+import cn.dev33.satoken.stp.StpUtil;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
@@ -131,6 +133,25 @@ public class RoleController extends BaseController {
     @Operation(summary = "添加角色信息", description = "添加新的语音助手角色")
     public ResultMessage create(@Valid @RequestBody RoleAddParam param) {
         try {
+            // 1) 强制要求已登录（否则别走到 SQL）
+            if (!StpUtil.isLogin()) {
+                logger.error("[CREATE ROLE] NOT LOGIN, token={}", StpUtil.getTokenValue());
+                return ResultMessage.error("未登录：请先登录后再创建角色");
+            }
+
+            // 2) 强制拿到 userId(int)
+            Integer uid;
+            try {
+                uid = StpUtil.getLoginIdAsInt();
+            } catch (Exception ex) {
+                logger.error("[CREATE ROLE] loginId is not int, loginId={}", StpUtil.getLoginId(), ex);
+                return ResultMessage.error("登录态异常：loginId 不是 int，请检查登录接口 StpUtil.login 是否传入 userId(int)");
+            }
+            if (uid == null) {
+                logger.error("[CREATE ROLE] uid is null, loginId={}, token={}", StpUtil.getLoginId(), StpUtil.getTokenValue());
+                return ResultMessage.error("登录态异常：未获取到 userId");
+            }
+
             SysRole role = new SysRole();
             role.setRoleName(param.getRoleName());
             role.setRoleDesc(param.getRoleDesc());
@@ -154,7 +175,10 @@ public class RoleController extends BaseController {
             role.setTtsProvider(param.getTtsProvider());
             role.setIsDefault(param.getIsDefault());
             role.setDatasetId(param.getDatasetId());
-            role.setUserId(CmsUtils.getUserId());
+
+            // 3) 关键：绑定当前登录用户 userId
+            role.setUserId(uid);
+            logger.info("[CREATE ROLE] FINAL uid={} token={} loginId={}", uid, StpUtil.getTokenValue(), StpUtil.getLoginId());
 
             roleService.add(role);
 

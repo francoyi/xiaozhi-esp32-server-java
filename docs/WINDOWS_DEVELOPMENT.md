@@ -120,7 +120,7 @@
    ```
 4. 运行后端服务：
    ```bash
-   java -jar target\xiaozhi.server-*.jar（版本号可能不同）
+   java -jar target\xiaozhi.server-4.0.0.jar
    ```
 
 ## 前端部署（Windows）

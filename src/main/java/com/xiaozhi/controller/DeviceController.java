@@ -253,7 +253,8 @@ public class DeviceController extends BaseController {
     @ResponseBody
     @Operation(summary = "处理OTA请求", description = "返回OTA结果")
     public ResponseEntity<byte[]> ota(
-        @Parameter(description = "设备ID") @RequestHeader("Device-Id") String deviceIdAuth,
+        @Parameter(description = "设备ID")
+        @RequestHeader("Device-Id") String deviceIdAuth,
         @RequestBody String requestBody,
         HttpServletRequest request) {
         try {

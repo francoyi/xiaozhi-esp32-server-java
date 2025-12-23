@@ -110,6 +110,13 @@ public class SysRole extends Base<SysRole> {
     private Double topP = 0.9;
 
     /**
+     * 归属用户ID（sys_user.userId）
+     * RoleMapper.xml 的 INSERT/SELECT 均包含该字段。
+     */
+    @Schema(description = "用户ID")
+    private Integer userId;
+
+    /**
      * 语音活动检测-能量阈值
      */
     @Schema(description = "语音活动检测-能量阈值")

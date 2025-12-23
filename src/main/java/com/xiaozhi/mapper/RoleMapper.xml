@@ -119,8 +119,27 @@
             userId = #{userId}
     </update>
 
-    <insert id="add" useGeneratedKeys="true" keyProperty="roleName" parameterType="com.xiaozhi.entity.SysRole">
-        INSERT INTO sys_role ( avatar, roleName, roleDesc, voiceName, ttsPitch, ttsSpeed, modelId, ttsId, sttId, memoryType, temperature, topP, userId, isDefault ) VALUES (
+    <insert id="add" useGeneratedKeys="true" keyProperty="roleId" parameterType="com.xiaozhi.entity.SysRole">
+        <!--
+          注意：VALUES 顺序必须与列顺序一致。
+          修复：将 memoryType/temperature/topP/userId/isDefault 的绑定顺序对齐，避免 userId 被错误绑定成 isDefault(null)。
+        -->
+        INSERT INTO sys_role (
+            avatar,
+            roleName,
+            roleDesc,
+            voiceName,
+            ttsPitch,
+            ttsSpeed,
+            modelId,
+            ttsId,
+            sttId,
+            memoryType,
+            temperature,
+            topP,
+            userId,
+            isDefault
+        ) VALUES (
             #{avatar},
             #{roleName},
             #{roleDesc},
@@ -128,19 +147,13 @@
             #{ttsPitch},
             #{ttsSpeed},
             #{modelId},
-            <choose>
-                <when test="ttsId == -1">null</when>
-                <otherwise>#{ttsId}</otherwise>
-            </choose>,
-            <choose>
-                <when test="sttId == -1">null</when>
-                <otherwise>#{sttId}</otherwise>
-            </choose>,
+            #{ttsId},
+            #{sttId},
+            #{memoryType},
             #{temperature},
             #{topP},
             #{userId},
-            #{isDefault},
-            #{memoryType}
+            #{isDefault}
         )
     </insert>
 
