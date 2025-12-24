@@ -38,6 +38,21 @@ import java.util.List;
 @Tag(name = "角色管理", description = "角色相关操作")
 public class RoleController extends BaseController {
 
+    /**
+     * 统一从 Sa-Token 获取当前登录用户ID（数据库自增 int）
+     */
+    private Integer currentUserIdOrNull() {
+        try {
+            if (!StpUtil.isLogin()) {
+                return null;
+            }
+            return StpUtil.getLoginIdAsInt();
+        } catch (Exception e) {
+            logger.error("[AUTH] getLoginIdAsInt failed, loginId={} token={} ", StpUtil.getLoginId(), StpUtil.getTokenValue(), e);
+            return null;
+        }
+    }
+
     @Resource
     private SysRoleService roleService;
 
@@ -59,7 +74,15 @@ public class RoleController extends BaseController {
     public ResultMessage list(SysRole role, HttpServletRequest request) {
         try {
             PageFilter pageFilter = initPageFilter(request);
-            role.setUserId(CmsUtils.getUserId());
+            Integer uid = currentUserIdOrNull();
+            if (uid == null) {
+                // 兼容旧逻辑：如果 CmsUtils 能取到就用（但优先 Sa-Token）
+                uid = CmsUtils.getUserId();
+            }
+            if (uid == null) {
+                return ResultMessage.error("未登录或登录态异常：无法获取 userId");
+            }
+            role.setUserId(uid);
             List<SysRole> roleList = roleService.query(role, pageFilter);
 
             // 转换为DTO
@@ -86,6 +109,14 @@ public class RoleController extends BaseController {
     @Operation(summary = "更新角色信息", description = "更新语音助手角色配置")
     public ResultMessage update(@PathVariable Integer roleId, @Valid @RequestBody RoleUpdateParam param) {
         try {
+            Integer uid = currentUserIdOrNull();
+            if (uid == null) {
+                uid = CmsUtils.getUserId();
+            }
+            if (uid == null) {
+                return ResultMessage.error("未登录或登录态异常：无法获取 userId");
+            }
+
             SysRole role = new SysRole();
             role.setRoleId(roleId);
             role.setRoleName(param.getRoleName());
@@ -110,7 +141,7 @@ public class RoleController extends BaseController {
             role.setTtsProvider(param.getTtsProvider());
             role.setIsDefault(param.getIsDefault());
             role.setDatasetId(param.getDatasetId());
-            role.setUserId(CmsUtils.getUserId());
+            role.setUserId(uid);
 
             roleService.update(role);
 
@@ -201,14 +232,27 @@ public class RoleController extends BaseController {
     @Operation(summary = "删除角色信息", description = "删除指定的语音助手角色")
     public ResultMessage delete(@PathVariable Integer roleId) {
         try {
+            Integer uid = currentUserIdOrNull();
+            if (uid == null) {
+                uid = CmsUtils.getUserId();
+            }
+            if (uid == null) {
+                return ResultMessage.error("未登录或登录态异常：无法获取 userId");
+            }
+
             // 验证角色是否属于当前用户
             SysRole role = roleService.selectRoleById(roleId);
             if (role == null) {
                 return ResultMessage.error("角色不存在");
             }
-            logger.error("用户ID：" + CmsUtils.getUserId() + "，角色用户ID：" + role.getUserId());
-            if (!role.getUserId().equals(CmsUtils.getUserId())) {
+            logger.info("[DELETE ROLE] uid={}, roleUserId={}, roleId={}", uid, role.getUserId(), roleId);
+            if (role.getUserId() == null || !role.getUserId().equals(uid)) {
                 return ResultMessage.error("无权删除该角色");
+            }
+
+            // 业务规则：published=1（已发布/端侧引用）禁止删除
+            if (role.getPublished() != null && role.getPublished() == 1) {
+                return ResultMessage.error("该角色已发布到端侧，无法删除。请先取消发布后再删除。");
             }
 
             roleService.deleteById(roleId);

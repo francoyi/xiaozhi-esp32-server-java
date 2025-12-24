@@ -81,6 +81,9 @@ public class RoleDTO {
     @Schema(description = "是否默认角色(1是 0否)", example = "0", allowableValues = {"0", "1"})
     private String isDefault;
 
+    @Schema(description = "是否已发布到端侧(1是 0否)", example = "0", allowableValues = {"0", "1"})
+    private Integer published;
+
     @Schema(description = "总设备数", example = "5")
     private Integer totalDevice;
 

@@ -21,6 +21,7 @@
         <result property="userId" column="userId" />
         <result property="state" column="state" />
         <result property="isDefault" column="isDefault" />
+        <result property="published" column="published" />
         <result property="createTime" column="createTime" />
         <result property="totalDevice" column="totalDevice" />
         <result property="modelName" column="modelName" />
@@ -37,6 +38,7 @@
         sys_role.temperature, sys_role.topP,
         sys_role.vadSpeechTh, sys_role.vadSilenceTh, sys_role.vadEnergyTh, sys_role.vadSilenceMs,
         sys_role.userId, sys_role.state, sys_role.isDefault, sys_role.createTime
+        , sys_role.published
     </sql>
 
     <sql id="Model_Column_List">
@@ -69,6 +71,7 @@
             <if test="roleId != null and roleId != ''">AND sys_role.roleId = #{roleId}</if>
             <if test="roleName != null and roleName != ''">AND sys_role.roleName LIKE CONCAT('%', #{roleName}, '%')</if>
             <if test="isDefault != null and isDefault != ''">AND sys_role.isDefault = #{isDefault}</if>
+            <if test="published != null">AND sys_role.published = #{published}</if>
         GROUP BY sys_role.roleId
     </select>
 
@@ -103,7 +106,8 @@
             <if test="vadSilenceMs != null and vadSilenceMs != ''">vadSilenceMs = #{vadSilenceMs},</if>
             <if test="ttsPitch != null and ttsPitch != ''">ttsPitch = #{ttsPitch},</if>
             <if test="ttsSpeed != null and ttsSpeed != ''">ttsSpeed = #{ttsSpeed},</if>
-            <if test="memoryType != null and memoryType != ''">memoryType = #{memoryType}</if>
+            <if test="memoryType != null and memoryType != ''">memoryType = #{memoryType},</if>
+            <if test="published != null">published = #{published}</if>
         </set>
         WHERE
             roleId = #{roleId}
@@ -138,7 +142,8 @@
             temperature,
             topP,
             userId,
-            isDefault
+            isDefault,
+            published
         ) VALUES (
             #{avatar},
             #{roleName},
@@ -153,7 +158,8 @@
             #{temperature},
             #{topP},
             #{userId},
-            #{isDefault}
+            #{isDefault},
+            #{published}
         )
     </insert>
 
@@ -169,5 +175,31 @@
     <delete id="deleteById" parameterType="java.lang.Integer">
         DELETE FROM sys_role WHERE roleId = #{roleId}
     </delete>
+
+    <!-- 发布相关：覆盖式设置 -->
+    <update id="clearPublishedByUserId">
+        UPDATE sys_role SET published = 0
+        WHERE userId = #{userId}
+    </update>
+
+    <update id="setPublishedByRoleIds">
+        UPDATE sys_role SET published = 1
+        WHERE userId = #{userId}
+          AND roleId IN
+          <foreach collection="roleIds" item="id" open="(" separator="," close=")">
+              #{id}
+          </foreach>
+    </update>
+
+    <select id="listPublishedRolesByUserId" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Role_Column_List"/>
+        FROM sys_role
+        WHERE userId = #{userId}
+          AND published = 1
+          AND state = 1
+        ORDER BY roleId
+        LIMIT 2
+    </select>
 
 </mapper>

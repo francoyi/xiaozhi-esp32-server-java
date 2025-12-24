@@ -159,6 +159,12 @@ public class SysRole extends Base<SysRole> {
     private String isDefault;
 
     /**
+     * 是否已发布到端侧(1=是,0=否)
+     */
+    @Schema(description = "是否已发布到端侧(1是 0否)")
+    private Integer published;
+
+    /**
      * 总设备数
      */
     @Schema(description = "总设备数")

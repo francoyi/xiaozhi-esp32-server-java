@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.xiaozhi.entity.SysRole;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpHeaders;
@@ -34,6 +35,7 @@ import com.xiaozhi.dto.param.*;
 import com.xiaozhi.dto.response.DeviceDTO;
 import com.xiaozhi.entity.SysDevice;
 import com.xiaozhi.service.SysDeviceService;
+import com.xiaozhi.service.SysRoleService;
 import com.xiaozhi.utils.CmsUtils;
 import com.xiaozhi.utils.DtoConverter;
 import com.xiaozhi.utils.JsonUtil;
@@ -61,6 +63,9 @@ public class DeviceController extends BaseController {
 
     @Resource
     private SysDeviceService deviceService;
+
+    @Resource
+    private SysRoleService roleService;
 
     @Resource
     private SessionManager sessionManager;
@@ -430,4 +435,27 @@ public class DeviceController extends BaseController {
         }
         return ResponseEntity.ok("success");
     }
+
+    @GetMapping("/{deviceId}/roles/published")
+    @ResponseBody
+    @Operation(summary = "端侧拉取已发布角色", description = "设备通过 deviceId 拉取所属用户已发布的角色配置（最多2个）")
+    public ResultMessage getPublishedRolesForDevice(@PathVariable String deviceId) {
+        try {
+            // 设备可匿名拉取：根据 deviceId 找 userId
+            SysDevice device = deviceService.selectDeviceById(deviceId);
+            if (device == null || device.getUserId() == null) {
+                return ResultMessage.error("设备未绑定用户");
+            }
+            Integer uid = device.getUserId();
+            java.util.List<SysRole> roles = roleService.listPublishedRolesByUserId(uid);
+            java.util.Map<String, Object> data = new java.util.HashMap<>();
+            data.put("deviceId", deviceId);
+            data.put("roles", roles);
+            return ResultMessage.success(data);
+        } catch (Exception e) {
+            logger.error(e.getMessage(), e);
+            return ResultMessage.error("拉取失败");
+        }
+    }
+
 }

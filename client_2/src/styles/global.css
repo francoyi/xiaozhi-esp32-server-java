@@ -1,0 +1,16 @@
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden; /* 禁止整页滚动：让页面内部的 scroll-area 来滚 */
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}

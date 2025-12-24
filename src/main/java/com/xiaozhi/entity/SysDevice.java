@@ -31,6 +31,19 @@ public class SysDevice extends SysRole {
     private String sessionId;
 
     /**
+     * 当前绑定的角色ID
+     */
+    @Schema(description = "当前角色ID", example = "1")
+    private Integer roleId;
+
+    /**
+     * 绑定的用户ID
+     */
+    @Schema(description = "用户ID", example = "1")
+    private Integer userId;
+
+
+    /**
      * 设备名称
      */
     @Schema(description = "设备名称/别名", example = "客厅小智音箱")
