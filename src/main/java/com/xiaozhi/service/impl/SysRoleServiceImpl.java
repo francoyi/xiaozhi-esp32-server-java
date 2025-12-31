@@ -14,7 +14,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.ArrayList;
 
 /**
  * 角色操作
@@ -45,11 +44,6 @@ public class SysRoleServiceImpl extends BaseServiceImpl implements SysRoleServic
     @Override
     @Transactional
     public int add(SysRole role) {
-        // 默认未发布
-        if (role != null && role.getPublished() == null) {
-            role.setPublished(0);
-        }
-
         // 如果当前配置被设置为默认，则将同类型同用户的其他配置设置为非默认
         if (role.getIsDefault() != null && role.getIsDefault().equals("1")) {
             roleMapper.resetDefault(role);
@@ -163,51 +157,13 @@ public class SysRoleServiceImpl extends BaseServiceImpl implements SysRoleServic
     }
 
     /**
-     * 查询当前用户已发布(端侧引用)的角色（最多2个）
+     * 设备端同步：返回用户所有已发布(published=1)的角色
      */
     @Override
-    public List<SysRole> listPublishedRolesByUserId(Integer userId) {
+    public List<SysRole> listPublishedByUserId(Integer userId) {
         if (userId == null) {
-            return new ArrayList<>();
+            return List.of();
         }
-        List<SysRole> roles = roleMapper.listPublishedRolesByUserId(userId);
-        return roles == null ? new ArrayList<>() : roles;
-    }
-
-    /**
-     * 覆盖式设置发布角色：先清空该用户所有角色 published，再设置选中的为 1。
-     * 业务规则：最多2个。
-     */
-    @Override
-    @Transactional
-    public void setPublishedRoleIds(Integer userId, List<Integer> roleIds) {
-        if (userId == null) {
-            throw new IllegalArgumentException("userId不能为空");
-        }
-        if (roleIds != null && roleIds.size() > 2) {
-            throw new IllegalArgumentException("最多只能发布2个角色");
-        }
-
-        // 1) 先清空
-        roleMapper.clearPublishedByUserId(userId);
-
-        // 2) 再设置
-        if (roleIds != null && !roleIds.isEmpty()) {
-            roleMapper.setPublishedByRoleIds(userId, roleIds);
-
-            // 可选：更新这些 roleId 的缓存（若开启缓存）
-            if (cacheManager != null) {
-                Cache cache = cacheManager.getCache(CACHE_NAME);
-                if (cache != null) {
-                    for (Integer rid : roleIds) {
-                        if (rid == null) continue;
-                        SysRole latest = roleMapper.selectRoleById(rid);
-                        if (latest != null) {
-                            cache.put(rid, latest);
-                        }
-                    }
-                }
-            }
-        }
+        return roleMapper.selectPublishedByUserId(userId);
     }
 }

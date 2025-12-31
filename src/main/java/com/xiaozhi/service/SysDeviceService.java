@@ -76,4 +76,8 @@ public interface SysDeviceService {
    */
   int delete(SysDevice device);
 
+
+  Integer selectDeviceUserId(String deviceId);
+
+
 }

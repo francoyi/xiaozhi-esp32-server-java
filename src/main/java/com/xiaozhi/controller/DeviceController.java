@@ -6,7 +6,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.xiaozhi.entity.SysRole;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpHeaders;
@@ -34,6 +33,7 @@ import com.xiaozhi.communication.common.SessionManager;
 import com.xiaozhi.dto.param.*;
 import com.xiaozhi.dto.response.DeviceDTO;
 import com.xiaozhi.entity.SysDevice;
+import com.xiaozhi.entity.SysRole;
 import com.xiaozhi.service.SysDeviceService;
 import com.xiaozhi.service.SysRoleService;
 import com.xiaozhi.utils.CmsUtils;
@@ -254,12 +254,60 @@ public class DeviceController extends BaseController {
     }
 
     @SaIgnore
+    @GetMapping("/roles/published")
+    @ResponseBody
+    @Operation(summary = "设备端获取已发布角色列表", description = "返回该设备账户下所有 published=1 的角色配置")
+    public ResponseEntity<byte[]> getPublishedRoles(
+            @RequestHeader(value = "Device-Id", required = false) String deviceId1,
+            @RequestHeader(value = "device-id", required = false) String deviceId2
+    ) {
+        try {
+            String deviceId = (deviceId1 != null && !deviceId1.isBlank()) ? deviceId1 : deviceId2;
+            if (deviceId == null) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+            }
+            deviceId = deviceId.trim().toUpperCase();
+
+            // 兼容 AABBCCDDEEFF -> AA:BB:CC:DD:EE:FF
+            if (deviceId.matches("^[0-9A-F]{12}$")) {
+                deviceId = deviceId.replaceAll("(.{2})(?!$)", "$1:");
+            }
+
+            if (!cmsUtils.isMacAddressValid(deviceId)) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+            }
+
+            // ✅ 关键：只查 userId，完全绕开 SysDevice 映射坑
+            Integer userId = deviceService.selectDeviceUserId(deviceId);
+            if (userId == null) {
+                return ResponseEntity.status(HttpStatus.ACCEPTED).build();
+            }
+
+            List<SysRole> roles = roleService.listPublishedByUserId(userId);
+
+            Map<String, Object> responseData = new HashMap<>();
+            responseData.put("deviceId", deviceId);
+            responseData.put("userId", userId);
+            responseData.put("roles", roles);
+
+            byte[] responseBytes = JsonUtil.OBJECT_MAPPER.writeValueAsBytes(responseData);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setContentLength(responseBytes.length);
+            return new ResponseEntity<>(responseBytes, headers, HttpStatus.OK);
+        } catch (Exception e) {
+            logger.error("获取已发布角色列表失败", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+
+    @SaIgnore
     @PostMapping("/ota")
     @ResponseBody
     @Operation(summary = "处理OTA请求", description = "返回OTA结果")
     public ResponseEntity<byte[]> ota(
-        @Parameter(description = "设备ID")
-        @RequestHeader("Device-Id") String deviceIdAuth,
+        @Parameter(description = "设备ID") @RequestHeader("Device-Id") String deviceIdAuth,
         @RequestBody String requestBody,
         HttpServletRequest request) {
         try {
@@ -435,27 +483,4 @@ public class DeviceController extends BaseController {
         }
         return ResponseEntity.ok("success");
     }
-
-    @GetMapping("/{deviceId}/roles/published")
-    @ResponseBody
-    @Operation(summary = "端侧拉取已发布角色", description = "设备通过 deviceId 拉取所属用户已发布的角色配置（最多2个）")
-    public ResultMessage getPublishedRolesForDevice(@PathVariable String deviceId) {
-        try {
-            // 设备可匿名拉取：根据 deviceId 找 userId
-            SysDevice device = deviceService.selectDeviceById(deviceId);
-            if (device == null || device.getUserId() == null) {
-                return ResultMessage.error("设备未绑定用户");
-            }
-            Integer uid = device.getUserId();
-            java.util.List<SysRole> roles = roleService.listPublishedRolesByUserId(uid);
-            java.util.Map<String, Object> data = new java.util.HashMap<>();
-            data.put("deviceId", deviceId);
-            data.put("roles", roles);
-            return ResultMessage.success(data);
-        } catch (Exception e) {
-            logger.error(e.getMessage(), e);
-            return ResultMessage.error("拉取失败");
-        }
-    }
-
 }

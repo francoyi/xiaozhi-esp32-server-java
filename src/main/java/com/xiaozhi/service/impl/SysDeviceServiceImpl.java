@@ -253,4 +253,10 @@ public class SysDeviceServiceImpl extends BaseServiceImpl implements SysDeviceSe
         return rows;
     }
 
+    @Override
+    public Integer selectDeviceUserId(String deviceId) {
+        return deviceMapper.selectDeviceUserId(deviceId);
+    }
+
+
 }

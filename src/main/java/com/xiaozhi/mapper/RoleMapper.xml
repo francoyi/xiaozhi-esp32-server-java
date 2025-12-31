@@ -1,205 +1,257 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.xiaozhi.dao.RoleMapper">
 
+    <!-- 只映射 sys_role 表真实存在的字段 + 允许 SELECT 出来的扩展字段 -->
     <resultMap id="BaseResultMap" type="com.xiaozhi.entity.SysRole">
         <id property="roleId" column="roleId" />
-        <result property="avatar" column="avatar" />
         <result property="roleName" column="roleName" />
         <result property="roleDesc" column="roleDesc" />
+        <result property="avatar" column="avatar" />
         <result property="voiceName" column="voiceName" />
+
+        <result property="ttsId" column="ttsId" />
         <result property="modelId" column="modelId" />
         <result property="sttId" column="sttId" />
-        <result property="ttsId" column="ttsId" />
+
+        <result property="ttsPitch" column="ttsPitch" />
+        <result property="ttsSpeed" column="ttsSpeed" />
+
         <result property="temperature" column="temperature" />
         <result property="topP" column="topP" />
         <result property="memoryType" column="memoryType" />
+
         <result property="vadSpeechTh" column="vadSpeechTh" />
         <result property="vadSilenceTh" column="vadSilenceTh" />
         <result property="vadEnergyTh" column="vadEnergyTh" />
         <result property="vadSilenceMs" column="vadSilenceMs" />
-        <result property="userId" column="userId" />
+
         <result property="state" column="state" />
         <result property="isDefault" column="isDefault" />
         <result property="published" column="published" />
+
+        <result property="userId" column="userId" />
         <result property="createTime" column="createTime" />
-        <result property="totalDevice" column="totalDevice" />
+
+        <!-- 以下是 JOIN sys_config 得到的扩展字段：数据库表里没有，但 SELECT 出来就能映射 -->
         <result property="modelName" column="modelName" />
-        <result property="ttsPitch" column="ttsPitch" />
-        <result property="ttsSpeed" column="ttsSpeed" />
         <result property="modelProvider" column="modelProvider" />
         <result property="ttsProvider" column="ttsProvider" />
+        <!-- 如果你的 SysRole 实体没有 sttName/sttDesc 这两个字段也没关系，MyBatis 会忽略 -->
+        <result property="sttName" column="sttName" />
+        <result property="sttDesc" column="sttDesc" />
+        <!-- totalDevice 同理：实体没有也不影响 -->
+        <result property="totalDevice" column="totalDevice" />
     </resultMap>
 
+    <!-- sys_role 表真实字段列表：注意没有 updateTime -->
     <sql id="Role_Column_List">
-        sys_role.roleId, sys_role.avatar, sys_role.roleName, sys_role.roleDesc, sys_role.voiceName,
-        sys_role.ttsPitch, sys_role.ttsSpeed,
-        sys_role.modelId, sys_role.sttId, sys_role.ttsId, sys_role.memoryType,
-        sys_role.temperature, sys_role.topP,
-        sys_role.vadSpeechTh, sys_role.vadSilenceTh, sys_role.vadEnergyTh, sys_role.vadSilenceMs,
-        sys_role.userId, sys_role.state, sys_role.isDefault, sys_role.createTime
-        , sys_role.published
+        sys_role.roleId,
+        sys_role.roleName,
+        sys_role.roleDesc,
+        sys_role.avatar,
+        sys_role.voiceName,
+        sys_role.ttsId,
+        sys_role.modelId,
+        sys_role.sttId,
+        sys_role.ttsPitch,
+        sys_role.ttsSpeed,
+        sys_role.temperature,
+        sys_role.topP,
+        sys_role.memoryType,
+        sys_role.vadSpeechTh,
+        sys_role.vadSilenceTh,
+        sys_role.vadEnergyTh,
+        sys_role.vadSilenceMs,
+        sys_role.state,
+        sys_role.isDefault,
+        sys_role.published,
+        sys_role.userId,
+        sys_role.createTime
     </sql>
 
     <sql id="Model_Column_List">
-        model_config.configName AS modelName, model_config.provider AS modelProvider
+        model_config.configName AS modelName,
+        model_config.provider AS modelProvider
     </sql>
 
     <sql id="STT_Column_List">
-        stt_config.configName AS sttName, stt_config.configDesc AS sttDesc
+        stt_config.configName AS sttName,
+        stt_config.configDesc AS sttDesc
     </sql>
 
     <sql id="TTS_Column_List">
         tts_config.provider AS ttsProvider
     </sql>
 
+    <!-- 管理端查询角色（保留 JOIN 字段与 totalDevice） -->
     <select id="query" resultMap="BaseResultMap">
         SELECT
-        <include refid="Role_Column_List"></include>,
-        <include refid="Model_Column_List"></include>,
-        <include refid="STT_Column_List"></include>,
-        <include refid="TTS_Column_List"></include>,
+        <include refid="Role_Column_List"/>,
+        <include refid="Model_Column_List"/>,
+        <include refid="STT_Column_List"/>,
+        <include refid="TTS_Column_List"/>,
         (SELECT COUNT(*) FROM sys_device WHERE sys_device.roleId = sys_role.roleId) AS totalDevice
         FROM
-            sys_role
-            LEFT JOIN sys_config tts_config ON sys_role.ttsId = tts_config.configId AND tts_config.configType = 'tts'
-            LEFT JOIN sys_config model_config ON sys_role.modelId = model_config.configId AND model_config.configType = 'llm'
-            LEFT JOIN sys_config stt_config ON sys_role.sttId = stt_config.configId AND stt_config.configType = 'stt'
+        sys_role
+        LEFT JOIN sys_config tts_config
+        ON sys_role.ttsId = tts_config.configId AND tts_config.configType = 'tts'
+        LEFT JOIN sys_config model_config
+        ON sys_role.modelId = model_config.configId AND model_config.configType = 'llm'
+        LEFT JOIN sys_config stt_config
+        ON sys_role.sttId = stt_config.configId AND stt_config.configType = 'stt'
         WHERE
-            sys_role.state = 1
-            <if test="userId != null and userId != ''">AND sys_role.userId = #{userId}</if>
-            <if test="roleId != null and roleId != ''">AND sys_role.roleId = #{roleId}</if>
-            <if test="roleName != null and roleName != ''">AND sys_role.roleName LIKE CONCAT('%', #{roleName}, '%')</if>
-            <if test="isDefault != null and isDefault != ''">AND sys_role.isDefault = #{isDefault}</if>
-            <if test="published != null">AND sys_role.published = #{published}</if>
-        GROUP BY sys_role.roleId
+        sys_role.state = 1
+        <if test="userId != null">AND sys_role.userId = #{userId}</if>
+        <if test="roleId != null">AND sys_role.roleId = #{roleId}</if>
+        <if test="roleName != null and roleName != ''">AND sys_role.roleName LIKE CONCAT('%', #{roleName}, '%')</if>
+        <if test="isDefault != null">AND sys_role.isDefault = #{isDefault}</if>
+        ORDER BY sys_role.createTime DESC
+    </select>
+
+    <select id="selectRoleById" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Role_Column_List"/>
+        FROM
+        sys_role
+        WHERE
+        roleId = #{roleId}
+        LIMIT 1
+    </select>
+
+    <!-- 设备端同步：查询某个用户所有已发布(published=1)的角色 -->
+    <select id="selectPublishedByUserId" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Role_Column_List"/>,
+        <include refid="Model_Column_List"/>,
+        <include refid="STT_Column_List"/>,
+        <include refid="TTS_Column_List"/>
+        FROM
+        sys_role
+        LEFT JOIN sys_config tts_config
+        ON sys_role.ttsId = tts_config.configId AND tts_config.configType = 'tts'
+        LEFT JOIN sys_config model_config
+        ON sys_role.modelId = model_config.configId AND model_config.configType = 'llm'
+        LEFT JOIN sys_config stt_config
+        ON sys_role.sttId = stt_config.configId AND stt_config.configType = 'stt'
+        WHERE
+        sys_role.userId = #{userId}
+        AND sys_role.published = 1
+        AND sys_role.state = 1
+        ORDER BY sys_role.createTime DESC
     </select>
 
     <update id="update" parameterType="com.xiaozhi.entity.SysRole">
-        UPDATE
-            sys_role
+        UPDATE sys_role
         <set>
-            avatar = #{avatar},
+            <if test="avatar != null">avatar = #{avatar},</if>
             <if test="roleName != null and roleName != ''">roleName = #{roleName},</if>
             <if test="roleDesc != null and roleDesc != ''">roleDesc = #{roleDesc},</if>
             <if test="voiceName != null and voiceName != ''">voiceName = #{voiceName},</if>
-            <if test="isDefault != null and isDefault != ''">isDefault = #{isDefault},</if>
-            <if test="modelId != null and modelId != ''">modelId = #{modelId},</if>
-            <if test="ttsId != null and ttsId != ''">
+
+            <if test="isDefault != null">isDefault = #{isDefault},</if>
+            <if test="published != null">published = #{published},</if>
+            <if test="state != null">state = #{state},</if>
+
+            <if test="modelId != null">modelId = #{modelId},</if>
+
+            <if test="ttsId != null">
                 <choose>
                     <when test="ttsId == -1">ttsId = null,</when>
                     <otherwise>ttsId = #{ttsId},</otherwise>
                 </choose>
             </if>
-            <if test="sttId != null and sttId != ''">
+
+            <if test="sttId != null">
                 <choose>
                     <when test="sttId == -1">sttId = null,</when>
                     <otherwise>sttId = #{sttId},</otherwise>
                 </choose>
             </if>
-            <if test="state != null and state != ''">state = #{state},</if>
-            <if test="temperature != null and temperature != ''">temperature = #{temperature},</if>
-            <if test="topP != null and topP != ''">topP = #{topP},</if>
-            <if test="vadEnergyTh != null and vadEnergyTh != ''">vadEnergyTh = #{vadEnergyTh},</if>
-            <if test="vadSpeechTh != null and vadSpeechTh != ''">vadSpeechTh = #{vadSpeechTh},</if>
-            <if test="vadSilenceTh != null and vadSilenceTh != ''">vadSilenceTh = #{vadSilenceTh},</if>
-            <if test="vadSilenceMs != null and vadSilenceMs != ''">vadSilenceMs = #{vadSilenceMs},</if>
-            <if test="ttsPitch != null and ttsPitch != ''">ttsPitch = #{ttsPitch},</if>
-            <if test="ttsSpeed != null and ttsSpeed != ''">ttsSpeed = #{ttsSpeed},</if>
-            <if test="memoryType != null and memoryType != ''">memoryType = #{memoryType},</if>
-            <if test="published != null">published = #{published}</if>
+
+            <if test="temperature != null">temperature = #{temperature},</if>
+            <if test="topP != null">topP = #{topP},</if>
+            <if test="memoryType != null">memoryType = #{memoryType},</if>
+
+            <if test="vadEnergyTh != null">vadEnergyTh = #{vadEnergyTh},</if>
+            <if test="vadSpeechTh != null">vadSpeechTh = #{vadSpeechTh},</if>
+            <if test="vadSilenceTh != null">vadSilenceTh = #{vadSilenceTh},</if>
+            <if test="vadSilenceMs != null">vadSilenceMs = #{vadSilenceMs},</if>
+
+            <if test="ttsPitch != null">ttsPitch = #{ttsPitch},</if>
+            <if test="ttsSpeed != null">ttsSpeed = #{ttsSpeed},</if>
         </set>
-        WHERE
-            roleId = #{roleId}
+        WHERE roleId = #{roleId}
     </update>
 
     <update id="resetDefault" parameterType="com.xiaozhi.entity.SysRole">
-        UPDATE
-            sys_role
-        <set>
-            isDefault = '0'
-        </set>
-        WHERE
-            userId = #{userId}
+        UPDATE sys_role
+        SET isDefault = 0
+        WHERE userId = #{userId}
     </update>
 
-    <insert id="add" useGeneratedKeys="true" keyProperty="roleId" parameterType="com.xiaozhi.entity.SysRole">
-        <!--
-          注意：VALUES 顺序必须与列顺序一致。
-          修复：将 memoryType/temperature/topP/userId/isDefault 的绑定顺序对齐，避免 userId 被错误绑定成 isDefault(null)。
-        -->
-        INSERT INTO sys_role (
-            avatar,
-            roleName,
-            roleDesc,
-            voiceName,
-            ttsPitch,
-            ttsSpeed,
-            modelId,
-            ttsId,
-            sttId,
-            memoryType,
-            temperature,
-            topP,
-            userId,
-            isDefault,
-            published
-        ) VALUES (
-            #{avatar},
-            #{roleName},
-            #{roleDesc},
-            #{voiceName},
-            #{ttsPitch},
-            #{ttsSpeed},
-            #{modelId},
-            #{ttsId},
-            #{sttId},
-            #{memoryType},
-            #{temperature},
-            #{topP},
-            #{userId},
-            #{isDefault},
-            #{published}
+    <!-- ✅ 修复版 insert：列顺序与 values 顺序严格对应 -->
+    <insert id="add" useGeneratedKeys="true" keyProperty="roleId"
+            parameterType="com.xiaozhi.entity.SysRole">
+        INSERT INTO sys_role
+        (
+        roleName,
+        roleDesc,
+        avatar,
+        voiceName,
+        ttsId,
+        modelId,
+        sttId,
+        ttsPitch,
+        ttsSpeed,
+        temperature,
+        topP,
+        memoryType,
+        vadSpeechTh,
+        vadSilenceTh,
+        vadEnergyTh,
+        vadSilenceMs,
+        state,
+        isDefault,
+        published,
+        userId,
+        createTime
+        )
+        VALUES
+        (
+        #{roleName},
+        #{roleDesc},
+        #{avatar},
+        #{voiceName},
+        <choose>
+            <when test="ttsId == -1">null</when>
+            <otherwise>#{ttsId}</otherwise>
+        </choose>,
+        #{modelId},
+        <choose>
+            <when test="sttId == -1">null</when>
+            <otherwise>#{sttId}</otherwise>
+        </choose>,
+        #{ttsPitch},
+        #{ttsSpeed},
+        #{temperature},
+        #{topP},
+        #{memoryType},
+        #{vadSpeechTh},
+        #{vadSilenceTh},
+        #{vadEnergyTh},
+        #{vadSilenceMs},
+        1,
+        #{isDefault},
+        0,
+        #{userId},
+        NOW()
         )
     </insert>
-
-    <select id="selectRoleById" resultMap="BaseResultMap">
-        SELECT
-        <include refid="Role_Column_List"></include>
-        FROM
-            sys_role
-        WHERE
-            roleId = #{roleId}
-    </select>
 
     <delete id="deleteById" parameterType="java.lang.Integer">
         DELETE FROM sys_role WHERE roleId = #{roleId}
     </delete>
-
-    <!-- 发布相关：覆盖式设置 -->
-    <update id="clearPublishedByUserId">
-        UPDATE sys_role SET published = 0
-        WHERE userId = #{userId}
-    </update>
-
-    <update id="setPublishedByRoleIds">
-        UPDATE sys_role SET published = 1
-        WHERE userId = #{userId}
-          AND roleId IN
-          <foreach collection="roleIds" item="id" open="(" separator="," close=")">
-              #{id}
-          </foreach>
-    </update>
-
-    <select id="listPublishedRolesByUserId" resultMap="BaseResultMap">
-        SELECT
-        <include refid="Role_Column_List"/>
-        FROM sys_role
-        WHERE userId = #{userId}
-          AND published = 1
-          AND state = 1
-        ORDER BY roleId
-        LIMIT 2
-    </select>
 
 </mapper>

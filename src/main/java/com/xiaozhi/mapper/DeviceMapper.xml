@@ -32,6 +32,23 @@
         <result property="sessionId" column="sessionId" />
     </resultMap>
 
+    <resultMap id="DeviceOnlyMap" type="com.xiaozhi.entity.SysDevice">
+        <id property="deviceId" column="deviceId" />
+        <result property="deviceName" column="deviceName" />
+        <result property="ip" column="ip" />
+        <result property="wifiName" column="wifiName" />
+        <result property="chipModelName" column="chipModelName" />
+        <result property="type" column="type" />
+        <result property="version" column="version" />
+        <result property="state" column="state" />
+        <result property="roleId" column="roleId" />
+        <result property="userId" column="userId" />
+        <result property="lastLogin" column="lastLogin" />
+        <result property="createTime" column="createTime" />
+        <result property="location" column="location" />
+    </resultMap>
+
+
     <sql id="Device_Column_List">
         sys_device.deviceId, sys_device.deviceName, sys_device.ip, sys_device.wifiName,
         sys_device.chipModelName, sys_device.type, sys_device.version, sys_device.state,
@@ -64,13 +81,21 @@
 
     </select>
 
-    <select id="selectDeviceById" resultMap="BaseResultMap">
+    <select id="selectDeviceById" resultMap="DeviceOnlyMap">
         SELECT
-            <include refid="Device_Column_List"></include>
+        <include refid="Device_Column_List"></include>
         FROM
-            sys_device
+        sys_device
         WHERE
-            deviceId = #{deviceId}
+        deviceId = #{deviceId}
+        LIMIT 1
+    </select>
+
+    <select id="selectDeviceUserId" resultType="java.lang.Integer">
+        SELECT userId
+        FROM sys_device
+        WHERE deviceId = #{deviceId}
+            LIMIT 1
     </select>
 
     <select id="queryVerifyCode" parameterType="com.xiaozhi.entity.SysDevice" resultMap="BaseResultMap">

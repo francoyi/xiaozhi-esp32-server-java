@@ -28,4 +28,8 @@ public interface DeviceMapper {
   int delete(SysDevice device);
 
   int insertCode(String deviceId, String code);
+
+  Integer selectDeviceUserId(String deviceId);
+
+
 }
