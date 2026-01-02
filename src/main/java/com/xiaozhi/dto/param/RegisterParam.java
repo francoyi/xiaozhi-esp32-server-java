@@ -39,7 +39,6 @@ public class RegisterParam {
     private String tel;
 
     @Schema(description = "验证码（邮箱或手机验证码）", example = "123456", requiredMode = Schema.RequiredMode.REQUIRED)
-    @NotBlank(message = "验证码不能为空")
     @Pattern(regexp = "^\\d{6}$", message = "验证码格式不正确")
     private String code;
 }

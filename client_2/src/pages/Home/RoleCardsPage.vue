@@ -14,6 +14,8 @@ const router = useRouter()
 // 顶部：设备列表 + 当前设备（仅用于显示连接状态，不影响角色编辑/删除/发布）
 const devices = ref<DeviceDTO[]>([])
 const currentDeviceId = ref<string>('')
+const ADD_DEVICE_VALUE = '__add_device__'
+const lastDeviceId = ref<string>('')
 const isConnected = ref(false)
 let ws: WsClient | null = null
 
@@ -39,7 +41,14 @@ const currentDevice = computed(() => devices.value.find(d => d.deviceId === curr
 async function loadDevices() {
   const res = await queryDevices({ pageNum: 1, pageSize: 100 })
   devices.value = res?.data?.list ?? []
-  if (!currentDeviceId.value && devices.value.length > 0) currentDeviceId.value = devices.value[0].deviceId
+  if (!currentDeviceId.value && devices.value.length > 0) {
+    currentDeviceId.value = devices.value[0].deviceId
+    lastDeviceId.value = currentDeviceId.value
+  }
+  if (devices.value.length === 0) {
+    currentDeviceId.value = ''
+    lastDeviceId.value = ''
+  }
 }
 
 function disconnectWs() {
@@ -91,8 +100,20 @@ async function loadRoles() {
   roles.value = res?.data?.list ?? []
 }
 
-watch(currentDeviceId, (id) => {
-  if (id) connectWs(id)
+watch(currentDeviceId, (id, prev) => {
+  if (id === ADD_DEVICE_VALUE) {
+    // 选择“添加设备”：跳转到设备连接页，并恢复之前的设备选择
+    const fallback = (prev && prev !== ADD_DEVICE_VALUE) ? prev : (lastDeviceId.value || devices.value[0]?.deviceId || '')
+    currentDeviceId.value = fallback
+    router.push('/devices')
+    return
+  }
+  if (id) {
+    lastDeviceId.value = id
+    connectWs(id)
+  } else {
+    disconnectWs()
+  }
 })
 
 function enterDeleteMode() {
@@ -218,20 +239,24 @@ onMounted(async () => {
     <div class="fixed-header">
       <div class="topbar">
         <div class="device-title">
-          <div class="device-name">{{ currentDevice?.deviceName || currentDeviceId || '—' }}</div>
+          <select class="device-select" v-model="currentDeviceId">
+            <option v-if="devices.length === 0" value="" disabled>未连接设备</option>
+            <option v-for="d in devices" :key="d.deviceId" :value="d.deviceId">
+              {{ d.deviceName || d.deviceId }}
+            </option>
+            <option :value="ADD_DEVICE_VALUE">➕ 添加设备...</option>
+          </select>
+
           <div class="device-status">
             <span class="dot" :class="{ on: isConnected }"></span>
             <span class="status-text">{{ isConnected ? '已连接' : '未连接' }}</span>
           </div>
         </div>
+      </div>
 
-        <select class="device-select" v-model="currentDeviceId">
-          <option v-for="d in devices" :key="d.deviceId" :value="d.deviceId">
-            {{ d.deviceName || d.deviceId }}
-          </option>
-        </select>
+      <div class="section-header">
+        <div class="section-title">角色卡</div>
 
-        <!-- 操作按钮：发布 / 删除（位置保持你现在的“右上角”布局） -->
         <div class="actions">
           <button class="icon-btn" type="button" @click="enterPublishMode" :class="{ on: mode === 'publish' }" title="发布">
             <span class="icon">📤</span>
@@ -241,8 +266,6 @@ onMounted(async () => {
           </button>
         </div>
       </div>
-
-      <div class="section-title">角色卡</div>
 
       <!-- 模式操作条（与截图一致：取消 + 确认） -->
       <div v-if="mode !== 'normal'" class="modebar">
@@ -331,7 +354,7 @@ onMounted(async () => {
 .topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   margin-bottom: 10px;
 }
@@ -339,17 +362,9 @@ onMounted(async () => {
 .device-title {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
-}
-
-.device-name {
-  font-size: 14px;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 160px;
+  flex: 1;
 }
 
 .device-status {
@@ -373,13 +388,28 @@ onMounted(async () => {
 }
 
 .device-select {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
   border: none;
   outline: none;
   background: #f3f3f3;
   border-radius: 14px;
   padding: 10px 12px;
   font-size: 14px;
+  width: 100%;
   max-width: 160px;
+  min-width: 0;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+  margin-bottom: 12px;
 }
 
 .section-title {
@@ -394,6 +424,7 @@ onMounted(async () => {
 .actions {
   display: inline-flex;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .icon-btn {
@@ -590,4 +621,13 @@ onMounted(async () => {
 .tab.active {
   background: #f3f3f3;
 }
+
+@media (max-width: 420px) {
+  .fixed-header { padding: 14px 12px 8px; }
+  .device-select { max-width: 100%; }
+  .icon-btn { width: 40px; height: 40px; border-radius: 12px; }
+  .section-title { font-size: 17px; padding: 9px 12px; }
+  .grid { gap: 12px; }
+}
+
 </style>

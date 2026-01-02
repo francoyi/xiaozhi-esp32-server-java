@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import api from '../../services/api'
-import { request } from '../../services/request'
-import { authStore } from '../../store/auth'
 import type { ConfigDTO, RoleAddOrUpdateParam, TemplateDTO } from '../../utils/types'
 import { queryConfigs } from '../../services/config'
 import { queryTemplates } from '../../services/template'
@@ -11,9 +8,6 @@ import { addRole } from '../../services/role'
 
 type VoiceOption = { label: string; value: string; lang?: string }
 
-// 在一些手机浏览器里，speechSynthesis.getVoices() 可能返回空数组（需要等待 onvoiceschanged）
-// 这里提供一个兜底列表：允许用户选择并保存 voiceName。
-// Edge/Windows 常见音色名参考：Xiaoxiao / Xiaoyi / Yunxi 等。
 const FALLBACK_VOICES: VoiceOption[] = [
   { label: 'Xiaoxiao (zh-CN)', value: 'zh-CN-XiaoxiaoNeural', lang: 'zh-CN' },
   { label: 'Xiaoyi (zh-CN)', value: 'zh-CN-XiaoyiNeural', lang: 'zh-CN' },
@@ -25,46 +19,6 @@ const FALLBACK_VOICES: VoiceOption[] = [
 
 const router = useRouter()
 
-function pickUserId(body: any): string {
-  const candidates = [
-    body?.data?.userId,
-    body?.data?.id,
-    body?.data?.loginId,
-    body?.data?.userInfo?.userId,
-    body?.data?.userInfo?.id,
-    body?.data?.saTokenInfo?.loginId,
-    body?.userId,
-    body?.id,
-    body?.loginId,
-    body?.username,
-    body?.userName,
-    body?.data?.username,
-    body?.data?.userName,
-  ]
-
-  const hit = candidates.find(v => v !== undefined && v !== null && String(v).trim() !== '')
-  return hit != null ? String(hit) : ''
-}
-
-async function ensureUserId(): Promise<string> {
-  const cached = authStore.getUserId?.()
-  if (cached && String(cached).trim() !== '') return String(cached)
-
-  try {
-    const res = await request.get(api.user.checkToken)
-    const body = res?.data
-    console.log('check-token raw:', body)
-
-    const uid = pickUserId(body)
-    if (uid) authStore.setUserId(uid)
-    return uid
-  } catch (e) {
-    console.error('check-token failed:', e)
-    return ''
-  }
-}
-
-
 // ====== STT（语音识别）选择：固定包含 Vosk（本地） + 追加数据库 STT 配置 ======
 function isVoskConfig(c: ConfigDTO): boolean {
   const p = (c.provider || '').toLowerCase()
@@ -73,18 +27,7 @@ function isVoskConfig(c: ConfigDTO): boolean {
   return p.includes('vosk') || n.includes('vosk') || d.includes('vosk')
 }
 
-// select 的 v-model 值：'vosk' 或 configId
 const sttSelectValue = ref<string>('vosk')
-
-// DB 中是否存在 vosk 的 config（有则优先用它的 configId）
-const voskConfigId = computed(() => {
-  const hit = sttConfigs.value.find(isVoskConfig)
-  return hit?.configId != null ? String(hit.configId) : ''
-})
-
-// 附加的 STT 配置（排除 vosk，避免重复显示）
-const sttExtraConfigs = computed(() => sttConfigs.value.filter(c => !isVoskConfig(c)))
-
 
 type LoadState = 'idle' | 'loading' | 'error'
 const state = ref<LoadState>('idle')
@@ -94,20 +37,22 @@ const configs = ref<ConfigDTO[]>([])
 const templates = ref<TemplateDTO[]>([])
 
 const llmConfigs = computed(() => configs.value.filter(c => (c.configType || '').toLowerCase() === 'llm'))
-// 注意：Client 端不提供“语音合成(TTS)配置”选择（保持上一版 UI）
+// Client 端不提供“语音合成(TTS)配置”选择（保持上一版 UI）
 // const ttsConfigs = computed(() => configs.value.filter(c => (c.configType || '').toLowerCase() === 'tts'))
 const sttConfigs = computed(() => configs.value.filter(c => (c.configType || '').toLowerCase() === 'stt'))
 
-// Web Speech API（Edge/Chrome）本地音色列表（用于下拉框）
+const voskConfigId = computed(() => {
+  const hit = sttConfigs.value.find(isVoskConfig)
+  return hit?.configId != null ? String(hit.configId) : ''
+})
+
+const sttExtraConfigs = computed(() => sttConfigs.value.filter(c => !isVoskConfig(c)))
+
+// Web Speech API 音色列表
 const voiceOptions = ref<VoiceOption[]>([])
 
 function normalizeVoice(v: SpeechSynthesisVoice): VoiceOption {
   const lang = v.lang || ''
-  // 这里用 voiceURI/name 作为 value 会更贴近浏览器本地 TTS。
-  // 但你的后端/端侧更可能需要的是“云 TTS voiceName（如 zh-CN-XiaoxiaoNeural）”。
-  // 为兼容两种情况：
-  // - 若浏览器 voiceURI/name 中包含 'Xiaoxiao' 之类，我们仍然让 value=zh-CN-xxxNeural
-  // - 否则 value 退回为 voiceURI 或 name
   const n = (v.name || '')
   const preferred = /Xiaoxiao/i.test(n) ? 'zh-CN-XiaoxiaoNeural'
     : /Xiaoyi/i.test(n) ? 'zh-CN-XiaoyiNeural'
@@ -116,15 +61,10 @@ function normalizeVoice(v: SpeechSynthesisVoice): VoiceOption {
     : /Yunxia/i.test(n) ? 'zh-CN-YunxiaNeural'
     : /Yunyang/i.test(n) ? 'zh-CN-YunyangNeural'
     : ''
-  return {
-    label: `${n}${lang ? ' (' + lang + ')' : ''}`,
-    value: preferred || v.voiceURI || n,
-    lang,
-  }
+  return { label: `${n}${lang ? ' (' + lang + ')' : ''}`, value: preferred || v.voiceURI || n, lang }
 }
 
 function pickDefaultVoice(list: VoiceOption[]): string {
-  // 默认优先：zh-CN + Xiaoxiao
   const xiaoxiao = list.find(v => v.lang?.toLowerCase() === 'zh-cn' && /xiaoxiao/i.test(v.label))
   if (xiaoxiao) return xiaoxiao.value
   const zh = list.find(v => v.lang?.toLowerCase() === 'zh-cn')
@@ -145,24 +85,16 @@ function loadBrowserVoicesOnce() {
 
   const fill = () => {
     const voices = ss.getVoices?.() || []
-    if (voices.length > 0) {
-      voiceOptions.value = voices.map(normalizeVoice)
-    } else {
-      voiceOptions.value = [...FALLBACK_VOICES]
-    }
+    voiceOptions.value = voices.length > 0 ? voices.map(normalizeVoice) : [...FALLBACK_VOICES]
     if (!form.voiceName) form.voiceName = pickDefaultVoice(voiceOptions.value)
   }
 
-  // 先尝试一次
   fill()
-
-  // 某些浏览器需要等待 voiceschanged
   const handler = () => fill()
   try {
     ss.addEventListener?.('voiceschanged', handler)
     detachVoicesChanged = () => ss.removeEventListener?.('voiceschanged', handler)
   } catch {
-    // Safari/旧环境可能没有 addEventListener
     ;(ss as any).onvoiceschanged = handler
     detachVoicesChanged = () => {
       try { (ss as any).onvoiceschanged = null } catch {}
@@ -170,34 +102,38 @@ function loadBrowserVoicesOnce() {
   }
 }
 
-// 表单（按你后端 RoleAddOrUpdateParam）
+// 表单：保持与 CreateRolePage 字段一致
 const form = reactive<RoleAddOrUpdateParam>({
   roleName: '',
+  roleDesc: '',
   modelId: null,
-  sttId: null,
   ttsId: null,
+  sttId: null,
   voiceName: '',
   systemPrompt: '',
-  // 仅前端使用：记忆类型 UI（目前只提供短期记忆 window）
+  // UI 字段：记忆类型（0=window）
   memoryTypeUi: 0 as any,
-  roleDesc: '',
 })
 
 watch(sttSelectValue, (v) => {
   if (v === 'vosk') {
-    // 若 DB 有 vosk 配置则用它的 configId，否则置空交给后端默认
     form.sttId = voskConfigId.value ? Number(voskConfigId.value) : null
   } else {
     form.sttId = v ? Number(v) : null
   }
 }, { immediate: true })
 
-// UI 上的“角色设定”选择：选模板后自动填充 systemPrompt
 const selectedTemplateId = ref<string>('')
 
-const canSubmit = computed(() => {
-  return !!form.roleName?.trim() && form.modelId != null
+watch(selectedTemplateId, (id) => {
+  if (!id) return
+  const t = templates.value.find(x => String(x.templateId) === String(id))
+  // 兼容字段：content / promptTemplate / templateContent
+  const content = (t as any)?.content ?? (t as any)?.promptTemplate ?? (t as any)?.templateContent ?? ''
+  if (String(content).trim()) form.systemPrompt = String(content)
 })
+
+const canSubmit = computed(() => !!String(form.roleName || '').trim() && form.modelId != null)
 
 function configLabel(c: ConfigDTO) {
   const id = c.configId
@@ -218,6 +154,7 @@ async function loadAll() {
     ])
     configs.value = cRes?.data?.list ?? []
     templates.value = tRes?.data?.list ?? []
+
     state.value = 'idle'
   } catch (e: any) {
     state.value = 'error'
@@ -225,85 +162,75 @@ async function loadAll() {
   }
 }
 
-watch(selectedTemplateId, (id) => {
-  if (!id) return
-  const tpl = templates.value.find(x => String(x.templateId) === String(id))
-  // 兼容字段：content / promptTemplate / templateContent
-  const content = (tpl as any)?.content
-    ?? (tpl as any)?.promptTemplate
-    ?? (tpl as any)?.templateContent
-    ?? ''
-  if (String(content).trim()) {
-    // 选择模板时直接填充（覆盖），避免“看起来没反应”
-    form.systemPrompt = String(content)
-  }
-})
 
-async function submit() {
+async function onCreate() {
   if (!canSubmit.value) return
-
   try {
-    const userId = await ensureUserId()
-    if (!userId) throw new Error('未获取到 userId/用户名：请先登录或检查 /user/check-token 返回字段')
-
-    await addRole({
-      roleName: form.roleName?.trim(),
-      roleDesc: (form as any).roleDesc || '',
-      modelId: form.modelId,
-      ttsId: form.ttsId,
-      voiceName: form.voiceName || '',
-      systemPrompt: form.systemPrompt || '',
-          // 后端入库需要 userId（否则会报 Column 'userId' cannot be null）
-      userId: userId,
-      // 记忆类型：目前仅提供 window
-      memoryType: 'window',
-    })
-    alert('创建成功')
-    router.back('/home')
+    const payload: any = { ...form }
+    payload.memoryType = Number(payload.memoryTypeUi || 0)
+    delete payload.memoryTypeUi
+    await addRole(payload)
+    alert('已创建')
+    router.replace('/home')
   } catch (e: any) {
     alert(e?.message || '创建失败')
   }
 }
 
 onMounted(loadAll)
-onUnmounted(() => {
-  detachVoicesChanged?.()
-  detachVoicesChanged = null
-})
+onUnmounted(() => { try { detachVoicesChanged?.() } catch {} })
 </script>
 
 <template>
   <div class="page">
-    <!-- 顶部导航（返回 + 标题） -->
-    <div class="nav">
-      <button class="back" @click="router.back()">‹</button>
-      <div class="title">创建AI角色</div>
-      <div style="width: 28px"></div>
+    <div class="header">
+      <button class="back" type="button" @click="router.back()">←</button>
+      <div class="title">创建角色</div>
+      <div class="spacer" />
     </div>
 
-    <div v-if="state==='loading'" class="hint">加载中…</div>
-    <div v-else-if="state==='error'" class="hint err">加载失败：{{ errorMsg }}</div>
+    <div v-if="state === 'loading'" class="hint">加载中…</div>
+    <div v-else-if="state === 'error'" class="hint error">{{ errorMsg }}</div>
 
-    <!-- 表单区 -->
-    <div class="form">
-      <div class="row">
-        <div class="label">AI角色昵称</div>
-        <input class="input" v-model="form.roleName" placeholder="" />
+    <div v-else class="form">
+      <div class="field">
+        <div class="label">名称</div>
+        <input v-model="form.roleName" class="input" placeholder="请输入角色名称" />
       </div>
 
-      <div class="row">
-        <div class="label">AI模型</div>
-        <select class="select" v-model="form.modelId">
+      <div class="field">
+        <div class="label">描述</div>
+        <textarea v-model="form.roleDesc" class="textarea" placeholder="请输入角色描述" />
+      </div>
+
+      <div class="field">
+        <div class="label">系统提示词</div>
+        <textarea v-model="form.systemPrompt" class="textarea" placeholder="请输入 system prompt" />
+        <div class="sub">
+          <select v-model="selectedTemplateId" class="select">
+            <option value="">从模板填充（可选）</option>
+            <option v-for="t in templates" :key="String(t.templateId)" :value="String(t.templateId)">
+              {{ t.templateName || t.templateId }}
+            </option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="label">对话模型（LLM）</div>
+        <select v-model="form.modelId" class="select">
           <option :value="null">请选择</option>
-          <option v-for="c in llmConfigs" :key="String(c.configId)" :value="c.configId">
+          <option v-for="c in llmConfigs" :key="String(c.configId)" :value="Number(c.configId)">
             {{ configLabel(c) }}
           </option>
         </select>
       </div>
-      
-      <div class="row">
-        <div class="label">语音识别</div>
-        <select class="select" v-model="sttSelectValue">
+
+      <!-- 语音合成（TTS）配置：Client 端不暴露选择项（保留数据库中的既有值即可） -->
+
+      <div class="field">
+        <div class="label">语音识别（STT）</div>
+        <select v-model="sttSelectValue" class="select">
           <option value="vosk">Vosk（本地）</option>
           <option v-for="c in sttExtraConfigs" :key="String(c.configId)" :value="String(c.configId)">
             {{ configLabel(c) }}
@@ -311,164 +238,48 @@ onUnmounted(() => {
         </select>
       </div>
 
-      <div class="row">
+      <div class="field">
         <div class="label">音色</div>
-        <select class="select" v-model="form.voiceName">
-          <option value="">请选择</option>
+        <select v-model="form.voiceName" class="select">
+          <option value="">请选择音色</option>
           <option v-for="v in voiceOptions" :key="v.value" :value="v.value">
             {{ v.label }}
           </option>
         </select>
       </div>
-      <!-- 记忆类型：目前仅提供“短期记忆（window）” -->
-      <div class="row">
+
+      <div class="field">
         <div class="label">记忆类型</div>
-        <select class="select" v-model="(form as any).memoryTypeUi">
-          <option :value="0">短期记忆（window）</option>
+        <select v-model="(form as any).memoryTypeUi" class="select">
+          <option :value="0">window（短期记忆）</option>
+          <option :value="1">summary（摘要记忆）</option>
+          <option :value="2">long（长期记忆）</option>
         </select>
       </div>
 
-
-
-      <div class="row">
-        <div class="label">角色设定</div>
-        <select class="select" v-model="selectedTemplateId">
-          <option value="">请选择</option>
-          <option v-for="t in templates" :key="String(t.templateId)" :value="String(t.templateId)">
-            {{ t.templateName || ('template-' + t.templateId) }}
-          </option>
-        </select>
+      <div class="footer">
+        <button class="primary" type="button" :disabled="!canSubmit" @click="onCreate">完成创建</button>
       </div>
-
-      <div class="row textarea-row">
-        <div class="label">私人设定</div>
-        <textarea
-            class="textarea"
-            v-model="form.systemPrompt"
-            placeholder="选填"
-        />
-      </div>
-    </div>
-
-
-    <!-- 底部按钮 -->
-    <div class="footer">
-      <button class="submit" :disabled="!canSubmit" @click="submit">
-        完成创建
-      </button>
     </div>
   </div>
 </template>
 
 <style scoped>
-.page {
-  min-height: 100vh;
-  background: #fff;
-  padding-bottom: 90px;
-  font-family: ui-sans-serif, system-ui;
-}
-
-.nav {
-  height: 56px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 14px;
-  border-bottom: 1px solid #f1f1f1;
-}
-
-.back {
-  border: none;
-  background: transparent;
-  font-size: 26px;
-  width: 28px;
-  cursor: pointer;
-}
-
-.title {
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.hint {
-  padding: 10px 16px;
-  font-size: 12px;
-  opacity: .75;
-}
-.hint.err { color: #c00; opacity: 1; }
-
-.form {
-  padding: 18px 18px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.row {
-  display: grid;
-  grid-template-columns: 90px minmax(0, 1fr);
-  align-items: center;
-  gap: 14px;
-}
-
-.label {
-  font-weight: 700;
-  color: #111;
-}
-
-.input, .select {
-  height: 36px;
-  border-radius: 10px;
-  border: none;
-  background: #f1eaea;
-  padding: 0 12px;
-  outline: none;
-  width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.textarea-row {
-  align-items: start;
-}
-
-.textarea {
-  min-height: 180px;
-  border-radius: 10px;
-  border: none;
-  background: #f1eaea;
-  padding: 10px 12px;
-  outline: none;
-  resize: none;
-}
-
-.footer {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 14px 18px 20px;
-  background: #fff;
-  border-top: 1px solid #f1f1f1;
-}
-
-.submit {
-  width: 100%;
-  height: 50px;
-  border-radius: 12px;
-  border: none;
-  background: #000;
-  color: #fff;
-  font-size: 16px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.submit:disabled {
-  opacity: .35;
-  cursor: not-allowed;
-}
+.page{ min-height:100vh; background:#fff; font-family:ui-sans-serif,system-ui; }
+.header{ position:sticky; top:0; z-index:10; background:#fff; display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid #f0f0f0; }
+.back{ width:36px; height:36px; border-radius:12px; border:1px solid #eee; background:#fafafa; }
+.title{ font-size:18px; font-weight:700; }
+.spacer{ flex:1; }
+.hint{ padding:18px 16px; color:#666; }
+.hint.error{ color:#c62828; }
+.form{ padding:14px 16px 120px; }
+.field{ margin-bottom:14px; }
+.label{ font-size:14px; font-weight:700; margin-bottom:8px; }
+.input,.textarea,.select{ width:100%; border:1px solid #eee; border-radius:14px; background:#fafafa; padding:12px 14px; font-size:14px; outline:none; }
+.textarea{ min-height:92px; resize:vertical; }
+.sub{ margin-top:8px; }
+.footer{ position:fixed; left:0; right:0; bottom:0; background:#fff; padding:14px 16px; display:flex; gap:12px; border-top:1px solid #f0f0f0; }
+.danger{ flex:1; height:44px; border-radius:14px; border:none; background:#ffe9e9; color:#c62828; font-weight:700; }
+.primary{ flex:2; height:44px; border-radius:14px; border:none; background:#111; color:#fff; font-weight:700; }
+.primary:disabled{ opacity:0.4; }
 </style>

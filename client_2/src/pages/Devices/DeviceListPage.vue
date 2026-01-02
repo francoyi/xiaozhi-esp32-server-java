@@ -106,37 +106,54 @@ function deviceCoverUrl(d: DeviceDTO) {
 
 <template>
   <div class="page">
-    <!-- 顶部设备栏（按你的设计图） -->
+    <!-- 顶部设备栏：设备名即下拉选择 -->
     <div class="topbar">
       <div class="device-title">
-        <div class="device-name">{{ currentDevice?.deviceName || currentDeviceId || '—' }}</div>
+        <!-- 设备名称 = 下拉选择 -->
+        <select
+            class="device-name-select"
+            v-model="currentDeviceId"
+            @change="connectWs(currentDeviceId)"
+        >
+          <option value="" disabled>未连接设备</option>
+          <option
+              v-for="d in devices"
+              :key="d.deviceId"
+              :value="d.deviceId"
+          >
+            {{ d.deviceName || d.deviceId }}
+          </option>
+        </select>
+
         <div class="device-status">
           <span class="dot" :class="{ on: isConnected }"></span>
-          <span class="status-text">{{ isConnected ? '已连接' : '未连接' }}</span>
+          <span class="status-text">
+            {{ isConnected ? '已连接' : '未连接' }}
+          </span>
         </div>
       </div>
-
-      <select class="device-select" v-model="currentDeviceId" @change="connectWs(currentDeviceId)">
-        <option v-for="d in devices" :key="d.deviceId" :value="d.deviceId">
-          {{ d.deviceName || d.deviceId }}
-        </option>
-      </select>
     </div>
 
     <!-- 标题 -->
     <div class="section-title">设备</div>
 
-    <!-- （可选）绑定设备：为了方便测试，我放了一个折叠输入 -->
+    <!-- 绑定设备 -->
     <details class="bind-box">
       <summary>绑定新设备（可选）</summary>
       <div class="bind-row">
-        <input class="bind-input" v-model="code" placeholder="输入设备验证码 code" />
+        <input
+            class="bind-input"
+            v-model="code"
+            placeholder="输入设备验证码 code"
+        />
         <button class="bind-btn" @click="bindDevice">绑定</button>
       </div>
     </details>
 
     <div v-if="state==='loading'" class="hint">加载中…</div>
-    <div v-else-if="state==='error'" class="hint err">加载失败：{{ errorMsg }}</div>
+    <div v-else-if="state==='error'" class="hint err">
+      加载失败：{{ errorMsg }}
+    </div>
 
     <!-- 设备卡片网格 -->
     <div class="grid">
@@ -148,15 +165,19 @@ function deviceCoverUrl(d: DeviceDTO) {
           @click="openDeviceConsole(d.deviceId)"
       >
         <div class="card-img">
-          <img v-if="deviceCoverUrl(d)" :src="deviceCoverUrl(d)" alt="" />
+          <img v-if="deviceCoverUrl(d)" :src="deviceCoverUrl(d)" />
           <div v-else class="img-fallback">📟</div>
         </div>
+
         <div class="card-name">{{ deviceTitle(d) }}</div>
 
-        <!-- 卡片角落操作（不影响主点击） -->
         <div class="card-actions" @click.stop>
-          <button class="mini" @click="openDeviceConsole(d.deviceId)">连接</button>
-          <button class="mini danger" @click="removeDevice(d.deviceId)">删除</button>
+          <button class="mini" @click="openDeviceConsole(d.deviceId)">
+            连接
+          </button>
+          <button class="mini danger" @click="removeDevice(d.deviceId)">
+            删除
+          </button>
         </div>
       </button>
 
@@ -174,6 +195,7 @@ function deviceCoverUrl(d: DeviceDTO) {
     </div>
   </div>
 </template>
+
 
 <style scoped>
 .page {
@@ -198,11 +220,24 @@ function deviceCoverUrl(d: DeviceDTO) {
   gap: 4px;
 }
 
-.device-name {
+.device-name-select {
   font-size: 28px;
   font-weight: 800;
   letter-spacing: 0.2px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  line-height: 1.1;
 }
+
+.device-name-select:disabled {
+  opacity: .7;
+}
+
 
 .device-status {
   display: inline-flex;
@@ -220,13 +255,6 @@ function deviceCoverUrl(d: DeviceDTO) {
 }
 .dot.on { background: #19c37d; }
 
-.device-select {
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid #eee;
-  background: #fafafa;
-  max-width: 180px;
-}
 
 /* 标题 */
 .section-title {

@@ -2,6 +2,7 @@ export default {
   user: {
     add: '/user',
     login: '/user/login',
+    scanRegister: '/user/scan-register',
     telLogin: '/user/tel-login',
     checkToken: '/user/check-token',
     refreshToken: '/user/refresh-token',

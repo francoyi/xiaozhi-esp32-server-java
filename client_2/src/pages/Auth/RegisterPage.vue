@@ -8,111 +8,49 @@ import { authStore } from '../../store/auth'
 const router = useRouter()
 const route = useRoute()
 
-type Mode = 'email' | 'tel'
-const mode = ref<Mode>('email')
-
 const username = ref('')
 const password = ref('')
-
-// 注册必须的字段（对应 RegisterParam）
-const email = ref('')
-const tel = ref('')
-const code = ref('')
+const confirmPassword = ref('')
 
 const loading = ref(false)
-const sending = ref(false)
-const cooldown = ref(0)
-let timer: any = null
-
-const accountValue = computed(() => (mode.value === 'email' ? email.value.trim() : tel.value.trim()))
-
-const canSendCode = computed(() => {
-  return accountValue.value.length > 0 && !sending.value && cooldown.value === 0
-})
 
 const canSubmit = computed(() => {
-  return (
-      username.value.trim().length > 0 &&
-      password.value.trim().length > 0 &&
-      accountValue.value.length > 0 &&
-      code.value.trim().length > 0 &&
-      !loading.value
-  )
+  return username.value.trim().length > 0 && password.value.trim().length > 0 && !loading.value
 })
 
-function startCooldown(seconds = 60) {
-  cooldown.value = seconds
-  if (timer) clearInterval(timer)
-  timer = setInterval(() => {
-    cooldown.value -= 1
-    if (cooldown.value <= 0) {
-      cooldown.value = 0
-      clearInterval(timer)
-      timer = null
-    }
-  }, 1000)
-}
-
 /**
- * 发送验证码
- * - 邮箱：POST /user/sendEmailCaptcha  body: { email, type }
- * - 手机：POST /user/sendSmsCaptcha    body: { tel, type }
- *
- * 你后端 SendCaptchaParam 有 type：注册场景可以传 "register"
- */
-async function sendCaptcha() {
-  if (!canSendCode.value) return
-  sending.value = true
-  try {
-    if (mode.value === 'email') {
-      await request.post(api.user.sendEmailCaptcha, { email: email.value.trim(), type: 'register' })
-    } else {
-      await request.post(api.user.sendSmsCaptcha, { tel: tel.value.trim(), type: 'register' })
-    }
-    startCooldown(60)
-    alert('验证码已发送')
-  } catch (e: any) {
-    alert(e?.message || '发送失败')
-  } finally {
-    sending.value = false
-  }
-}
-
-/**
- * 注册（严格匹配后端 RegisterParam）
- * 必填：username / password / code / (email 或 tel)
- * name/email/tel 可选（这里 name 先用 username 顶一下）
+ * ✅ 极简注册：仅用户名 + 密码
+ * - 调用后端扫码注册接口 /user/scan-register
+ * - 返回结构与 /login 一致：ResultMessage.success(LoginResponseDTO)
+ * - 若当前是扫码进入（/register?code=XXXX），注册并登录后自动 scan-bind
  */
 async function submit() {
   if (!canSubmit.value) return
+  if (confirmPassword.value && confirmPassword.value.trim() !== password.value.trim()) {
+    alert('两次密码不一致')
+    return
+  }
+
   loading.value = true
   try {
-    await request.post(api.user.add, {
+    const res = await request.post(api.user.scanRegister, {
       username: username.value.trim(),
       password: password.value.trim(),
-      name: username.value.trim(),
-      email: mode.value === 'email' ? email.value.trim() : null,
-      tel: mode.value === 'tel' ? tel.value.trim() : null,
-      code: code.value.trim(),
+      confirmPassword: (confirmPassword.value || password.value).trim(),
     })
 
-    // 注册成功后自动登录：POST /user/login  body: { username, password }
-    const loginRes = await request.post(api.user.login, {
-      username: username.value.trim(),
-      password: password.value.trim(),
-    })
-
-    // 你的后端：ResultMessage.success(LoginResponseDTO) => token 在 data.token
-    const token = (loginRes.data as any)?.data?.token
+    const token = (res.data as any)?.data?.token
+    const userId = (res.data as any)?.data?.userId || (res.data as any)?.data?.user?.userId
     if (token) authStore.setToken(String(token))
+    if (userId) authStore.setUserId(userId)
 
-    // 如果是扫码进入（/register?code=XXXX），注册+登录后自动绑定设备
+    // 扫码进入：自动绑定设备（不影响注册主流程）
     const scanCode = (route.query.code as string) || ''
     if (scanCode) {
       try {
         await request.post(api.device.scanBind, { code: scanCode })
       } catch (e) {
-        // 绑定失败不阻塞注册流程，让用户稍后在设备页手动绑定
+        // 绑定失败不阻塞
       }
     }
 
@@ -133,25 +71,9 @@ async function submit() {
       <div class="subtitle">设备激活</div>
 
       <div class="form">
-        <!-- 用户名/密码：按你的设计图保留 -->
         <input class="input" v-model="username" placeholder="输入用户名" autocomplete="username" />
         <input class="input" v-model="password" placeholder="输入密码" type="password" autocomplete="new-password" />
-
-        <!-- 由于后端强制验证码：最小补充（邮箱/手机号 + 验证码） -->
-        <div class="mode">
-          <button class="chip" :class="{ on: mode==='email' }" @click="mode='email'">邮箱</button>
-          <button class="chip" :class="{ on: mode==='tel' }" @click="mode='tel'">手机</button>
-        </div>
-
-        <input v-if="mode==='email'" class="input" v-model="email" placeholder="输入邮箱" />
-        <input v-else class="input" v-model="tel" placeholder="输入手机号" />
-
-        <div class="code-row">
-          <input class="input code-input" v-model="code" placeholder="输入验证码" />
-          <button class="code-btn" :disabled="!canSendCode" @click="sendCaptcha">
-            {{ cooldown>0 ? `${cooldown}s` : (sending ? '发送中…' : '发送验证码') }}
-          </button>
-        </div>
+        <input class="input" v-model="confirmPassword" placeholder="确认密码（可选）" type="password" autocomplete="new-password" />
 
         <button class="primary" :disabled="!canSubmit" @click="submit">
           {{ loading ? '提交中…' : '注册' }}
@@ -211,46 +133,6 @@ async function submit() {
   font-size: 14px;
 }
 
-.mode {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  margin-top: 4px;
-}
-
-.chip {
-  border: 1px solid #e9e9e9;
-  background: #fff;
-  border-radius: 999px;
-  padding: 8px 14px;
-  cursor: pointer;
-  font-weight: 700;
-  opacity: .7;
-}
-.chip.on {
-  opacity: 1;
-  border-color: #000;
-}
-
-.code-row {
-  display: flex;
-  gap: 10px;
-}
-.code-input { flex: 1; }
-
-.code-btn {
-  width: 120px;
-  border-radius: 10px;
-  border: 1px solid #e9e9e9;
-  background: #fafafa;
-  cursor: pointer;
-  font-weight: 700;
-}
-.code-btn:disabled {
-  opacity: .4;
-  cursor: not-allowed;
-}
-
 .primary {
   height: 48px;
   border-radius: 12px;
@@ -274,5 +156,4 @@ async function submit() {
   opacity: .75;
   margin-top: 6px;
 }
-
 </style>
