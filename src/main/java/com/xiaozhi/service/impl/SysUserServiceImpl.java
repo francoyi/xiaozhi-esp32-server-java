@@ -193,7 +193,7 @@ public class SysUserServiceImpl extends BaseServiceImpl implements SysUserServic
             // 创建虚拟设备
             SysDevice virtualDevice = new SysDevice();
             virtualDevice.setDeviceId(virtualDeviceId);
-            virtualDevice.setDeviceName("网页聊天");
+            virtualDevice.setDeviceName("无设备连接");
             virtualDevice.setUserId(userId);
             virtualDevice.setType("web");
             virtualDevice.setState(SysDevice.DEVICE_STATE_OFFLINE);

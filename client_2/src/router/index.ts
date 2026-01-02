@@ -12,6 +12,7 @@ import MePage from '../pages/Me/MePage.vue'
 
 import RegisterPage from '../pages/Auth/RegisterPage.vue'
 import LoginPage from '../pages/Auth/LoginPage.vue'
+import ScanPage from '../pages/Auth/ScanPage.vue'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -19,6 +20,7 @@ export const router = createRouter({
     // 🔐 认证页
     { path: '/login', component: LoginPage },
     { path: '/register', component: RegisterPage },
+    { path: '/scan', component: ScanPage },
 
     // 主应用
     { path: '/home', component: RoleCardsPage },
@@ -40,7 +42,7 @@ export const router = createRouter({
 })
 
 // 路由白名单（不需要登录也能访问）
-const WHITE_LIST = new Set(['/login', '/register'])
+const WHITE_LIST = new Set(['/login', '/register', '/scan'])
 
 router.beforeEach((to, _from, next) => {
   const token = authStore.getToken()

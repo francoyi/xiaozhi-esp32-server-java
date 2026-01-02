@@ -23,3 +23,26 @@ export async function deleteDevice(deviceId: string) {
   const res = await request.delete<ResultMessage>(url)
   return res.data
 }
+
+// 扫码：根据二维码 code 判断是否已绑定；若已绑定则直接登录
+export async function scanLogin(code: string) {
+  const res = await request.get<ResultMessage<any>>(api.device.scanLogin, { params: { code } })
+  return res.data
+}
+
+// 扫码：在用户已登录后，把设备绑定到当前账号
+export async function scanBind(code: string) {
+  const res = await request.post<ResultMessage>(api.device.scanBind, { code })
+  return res.data
+}
+
+const deviceService = {
+  queryDevices,
+  addDevice,
+  updateDevice,
+  deleteDevice,
+  scanLogin,
+  scanBind,
+}
+
+export default deviceService

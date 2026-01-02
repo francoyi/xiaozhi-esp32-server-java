@@ -1,11 +1,12 @@
 <<script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import api from '../../services/api'
 import { request } from '../../services/request'
 import { authStore } from '../../store/auth'
 
 const router = useRouter()
+const route = useRoute()
 
 const username = ref('')
 const password = ref('')
@@ -44,6 +45,17 @@ async function submit() {
     // 统一存「裸 token」：请求拦截器会自动补 Bearer
     const tokenStr = String(token).replace(/^Bearer\s+/i, '')
     authStore.setToken(tokenStr)
+
+    // 如果是扫码进入（/login?code=XXXX），登录成功后自动绑定设备
+    const code = (route.query.code as string) || ''
+    if (code) {
+      try {
+        await request.post(api.device.scanBind, { code })
+      } catch {
+        // 绑定失败不阻断登录：例如设备已绑定到本账号 / 或已被他人绑定
+      }
+    }
+
     router.push('/home')
   } catch (e: any) {
     alert(e?.message || '登录失败')
@@ -53,7 +65,8 @@ async function submit() {
 }
 
 function goRegister() {
-  router.push('/register')
+  const code = (route.query.code as string) || ''
+  router.push(code ? `/register?code=${encodeURIComponent(code)}` : '/register')
 }
 </script>
 

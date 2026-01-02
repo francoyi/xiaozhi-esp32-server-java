@@ -6,6 +6,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.xiaozhi.dto.response.LoginResponseDTO;
+import com.xiaozhi.dto.response.ScanLoginResponseDTO;
+import com.xiaozhi.dto.response.UserDTO;
+import com.xiaozhi.entity.SysUser;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpHeaders;
@@ -36,11 +40,13 @@ import com.xiaozhi.entity.SysDevice;
 import com.xiaozhi.entity.SysRole;
 import com.xiaozhi.service.SysDeviceService;
 import com.xiaozhi.service.SysRoleService;
+import com.xiaozhi.service.SysUserService;
 import com.xiaozhi.utils.CmsUtils;
 import com.xiaozhi.utils.DtoConverter;
 import com.xiaozhi.utils.JsonUtil;
 
 import cn.dev33.satoken.annotation.SaIgnore;
+import cn.dev33.satoken.stp.StpUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
@@ -48,6 +54,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+
 
 /**
  * 设备管理
@@ -68,6 +75,9 @@ public class DeviceController extends BaseController {
     private SysRoleService roleService;
 
     @Resource
+    private SysUserService userService;
+
+    @Resource
     private SessionManager sessionManager;
 
     @Resource
@@ -78,6 +88,138 @@ public class DeviceController extends BaseController {
 
     @Value("${xiaozhi.communication.protocol:both}")
     private String communicationProtocol;
+
+    /**
+     * 扫码登录：二维码URL携带设备验证码 code。
+     * - 若设备已绑定某个账户：直接登录该账户并返回 token。
+     * - 若设备未绑定：返回 bound=false，前端引导用户登录/注册后再调用 scan-bind。
+     */
+    @SaIgnore
+    @GetMapping("/scan-login")
+    @ResponseBody
+    @Operation(summary = "扫码登录", description = "二维码携带设备验证码 code；若设备已绑定则自动登录该账户，否则返回未绑定")
+    public ResultMessage scanLogin(@Parameter(description = "设备验证码") String code) {
+        try {
+            if (code == null || code.isBlank()) {
+                return ResultMessage.error("缺少验证码");
+            }
+
+            SysDevice v = new SysDevice();
+            v.setCode(code.trim());
+            SysDevice verify = deviceService.queryVerifyCode(v);
+            if (verify == null || verify.getDeviceId() == null) {
+                return ResultMessage.error("无效验证码");
+            }
+
+            String deviceId = verify.getDeviceId();
+            Integer userId = deviceService.selectDeviceUserId(deviceId);
+            if (userId == null) {
+                // 未绑定
+                ScanLoginResponseDTO resp = ScanLoginResponseDTO.unbound(code.trim(), deviceId);
+                return ResultMessage.success(resp);
+            }
+
+            // 已绑定：自动登录绑定用户
+            SysUser sysUser = userService.selectUserByUserId(userId);
+            if (sysUser == null) {
+                return ResultMessage.error("设备绑定账户不存在");
+            }
+
+            // 这里你原来用 2592000，就沿用（30天秒数）
+            StpUtil.login(sysUser.getUserId(), 2592000);
+
+            LoginResponseDTO login = new LoginResponseDTO();
+            login.setToken(StpUtil.getTokenValue());
+            login.setExpiresIn(2592000);
+            login.setUserId(sysUser.getUserId());
+
+            // ✅ 注意：username 要放到 UserDTO 里，而不是 LoginResponseDTO
+            UserDTO userDTO = new UserDTO();
+            userDTO.setUserId(sysUser.getUserId());
+            userDTO.setUsername(sysUser.getUsername());
+
+            // 以下字段：SysUser 有就填，没有就删（不会影响登录）
+            /*
+            userDTO.setName(sysUser.getName());
+            userDTO.setEmail(sysUser.getEmail());
+            userDTO.setTel(sysUser.getTel());
+            userDTO.setAvatar(sysUser.getAvatar());
+            userDTO.setState(sysUser.getState());
+            userDTO.setIsAdmin(sysUser.getIsAdmin());
+            userDTO.setRoleId(sysUser.getRoleId());
+            userDTO.setLoginIp(sysUser.getLoginIp());
+            userDTO.setLoginTime(sysUser.getLoginTime());
+            userDTO.setCreateTime(sysUser.getCreateTime());
+            */
+
+            login.setUser(userDTO);
+
+            ScanLoginResponseDTO resp = ScanLoginResponseDTO.bound(code.trim(), deviceId, login);
+            return ResultMessage.success(resp);
+
+        } catch (Exception e) {
+            logger.error("扫码登录失败", e);
+            return ResultMessage.error("扫码登录失败");
+        }
+    }
+
+    /**
+     * 扫码绑定：用户已登录的前提下，将二维码 code 对应设备绑定到当前账户。
+     * 不允许抢绑：若设备已绑定其他账户则返回错误。
+     */
+    @PostMapping("/scan-bind")
+    @ResponseBody
+    @Operation(summary = "扫码绑定设备", description = "用户已登录时，将二维码 code 对应设备绑定到当前账户；不允许抢绑")
+    public ResultMessage scanBind(@Valid @RequestBody DeviceScanBindParam param) {
+        try {
+            String code = param.getCode();
+            if (code == null || code.isBlank()) {
+                return ResultMessage.error("缺少验证码");
+            }
+
+            SysDevice v = new SysDevice();
+            v.setCode(code.trim());
+            SysDevice verify = deviceService.queryVerifyCode(v);
+            if (verify == null || verify.getDeviceId() == null) {
+                return ResultMessage.error("无效验证码");
+            }
+
+            String deviceId = verify.getDeviceId();
+            Integer existedUserId = deviceService.selectDeviceUserId(deviceId);
+            Integer currentUserId = CmsUtils.getUserId();
+
+            if (existedUserId != null && !existedUserId.equals(currentUserId)) {
+                return ResultMessage.error("该设备已绑定其他账户，无法抢绑");
+            }
+            if (existedUserId != null) {
+                // 已绑定到当前用户，幂等成功
+                SysDevice bound = deviceService.selectDeviceById(deviceId);
+                return ResultMessage.success(DtoConverter.toDeviceDTO(bound));
+            }
+
+            // 复用原有“添加设备”逻辑
+            SysDevice device = new SysDevice();
+            device.setCode(code.trim());
+            device.setUserId(currentUserId);
+            device.setDeviceName(verify.getType() != null && !verify.getType().isEmpty() ? verify.getType() : "小智");
+            device.setType(verify.getType());
+            device.setDeviceId(deviceId);
+
+            int row = deviceService.add(device);
+            if (row > 0) {
+                ChatSession session = sessionManager.getSessionByDeviceId(deviceId);
+                if (session != null) {
+                    sessionManager.closeSession(session);
+                }
+                SysDevice addedDevice = deviceService.selectDeviceById(deviceId);
+                return ResultMessage.success(DtoConverter.toDeviceDTO(addedDevice));
+            }
+            return ResultMessage.error("绑定失败");
+        } catch (Exception e) {
+            logger.error("扫码绑定设备失败", e);
+            return ResultMessage.error("扫码绑定设备失败");
+        }
+    }
 
     /**
      * 设备查询
@@ -124,7 +266,7 @@ public class DeviceController extends BaseController {
             }
 
             // 获取当前用户ID
-            Integer userId = CmsUtils.getUserId();
+            Integer userId = StpUtil.getLoginIdAsInt();
 
             // 调用服务批量更新
             int successCount = deviceService.batchUpdate(

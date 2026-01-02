@@ -403,6 +403,67 @@ public class UserController extends BaseController {
     }
 
     /**
+     * 扫码注册并直接登录：用于“扫码即登录/注册”流程，不需要验证码。
+     */
+    @SaIgnore
+    @PostMapping("/scan-register")
+    @Operation(summary = "扫码注册并登录", description = "注册成功后直接返回 token")
+    public ResultMessage scanRegister(@Valid @RequestBody ScanRegisterParam param) {
+        try {
+            if (!param.getPassword().equals(param.getConfirmPassword())) {
+                return ResultMessage.error("两次密码不一致");
+            }
+
+            // 用户名唯一性检查
+            SysUser existing = userService.selectUserByUsername(param.getUsername());
+            if (existing != null) {
+                return ResultMessage.error("用户名已存在");
+            }
+
+            // 创建用户
+            SysUser user = new SysUser();
+            user.setUsername(param.getUsername());
+            user.setPassword(authenticationService.encryptPassword(param.getPassword()));
+
+            if (userService.add(user) <= 0) {
+                return ResultMessage.error("注册失败");
+            }
+
+            // ✅ 关键：重新查一次，确保 userId 不为 null（避免主键未回填）
+            SysUser created = userService.selectUserByUsername(param.getUsername());
+            if (created == null || created.getUserId() == null) {
+                return ResultMessage.error("注册成功但获取用户ID失败");
+            }
+
+            // 直接登录
+            StpUtil.login(created.getUserId());
+
+            // 返回 token + user（先不拼 role/permissions，保证链路跑通）
+            LoginResponseDTO dto = new LoginResponseDTO();
+            dto.setToken(StpUtil.getTokenValue());
+            dto.setExpiresIn(2592000); // 可选：你项目里常用 30 天
+
+            dto.setUserId(created.getUserId());
+
+            UserDTO userDTO = new UserDTO();
+            userDTO.setUserId(created.getUserId());
+            userDTO.setUsername(created.getUsername());
+            //userDTO.setName(created.getName());
+            //userDTO.setEmail(created.getEmail());
+            //userDTO.setTel(created.getTel());
+            userDTO.setAvatar(created.getAvatar());
+            dto.setUser(userDTO);
+
+            return ResultMessage.success(dto);
+        } catch (Exception e) {
+            logger.error("扫码注册失败", e);
+            return ResultMessage.error("注册失败");
+        }
+    }
+
+
+
+    /**
      * 查询用户列表
      *
      * @param user 查询条件

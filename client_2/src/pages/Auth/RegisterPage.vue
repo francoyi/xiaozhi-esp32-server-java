@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import api from '../../services/api'
 import { request } from '../../services/request'
 import { authStore } from '../../store/auth'
 
 const router = useRouter()
+const route = useRoute()
 
 type Mode = 'email' | 'tel'
 const mode = ref<Mode>('email')
@@ -104,6 +105,16 @@ async function submit() {
     // 你的后端：ResultMessage.success(LoginResponseDTO) => token 在 data.token
     const token = (loginRes.data as any)?.data?.token
     if (token) authStore.setToken(String(token))
+
+    // 如果是扫码进入（/register?code=XXXX），注册+登录后自动绑定设备
+    const scanCode = (route.query.code as string) || ''
+    if (scanCode) {
+      try {
+        await request.post(api.device.scanBind, { code: scanCode })
+      } catch (e) {
+        // 绑定失败不阻塞注册流程，让用户稍后在设备页手动绑定
+      }
+    }
 
     alert('注册成功')
     router.push('/home')

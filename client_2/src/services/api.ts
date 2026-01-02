@@ -19,6 +19,8 @@ export default {
     update: '/device',
     delete: '/device',
     export: '/device/export',
+    scanLogin: '/device/scan-login',
+    scanBind: '/device/scan-bind',
   },
   agent: {
     add: '/agent',
