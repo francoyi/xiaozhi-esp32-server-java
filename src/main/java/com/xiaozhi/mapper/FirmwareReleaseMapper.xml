@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.xiaozhi.dao.FirmwareReleaseMapper">
+
+    <resultMap id="BaseResultMap" type="com.xiaozhi.entity.SysFirmwareRelease">
+        <id column="id" property="id"/>
+        <result column="chipModelName" property="chipModelName"/>
+        <result column="type" property="type"/>
+        <result column="version" property="version"/>
+        <result column="versionCode" property="versionCode"/>
+        <result column="downloadPath" property="downloadPath"/>
+        <result column="sha256" property="sha256"/>
+        <result column="isLatest" property="isLatest"/>
+        <result column="status" property="status"/>
+        <result column="minSupportedCode" property="minSupportedCode"/>
+        <result column="createTime" property="createTime"/>
+        <result column="updateTime" property="updateTime"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, chipModelName, type, version, versionCode, downloadPath, sha256, isLatest, status, minSupportedCode, createTime, updateTime
+    </sql>
+
+    <select id="query" parameterType="com.xiaozhi.entity.SysFirmwareRelease" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM sys_firmware_release
+        <where>
+            <if test="chipModelName != null and chipModelName != ''">
+                AND chipModelName = #{chipModelName}
+            </if>
+            <if test="type != null and type != ''">
+                AND type = #{type}
+            </if>
+            <if test="status != null">
+                AND status = #{status}
+            </if>
+            <if test="isLatest != null">
+                AND isLatest = #{isLatest}
+            </if>
+        </where>
+        ORDER BY versionCode DESC, id DESC
+    </select>
+
+    <!--
+      选择最新固件：
+      1) 优先匹配 chip + type 且 isLatest=1,status=1
+      2) 若无，则匹配 chip + type 为空 且 isLatest=1,status=1
+    -->
+    <select id="selectLatest" resultMap="BaseResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM sys_firmware_release
+        WHERE status = 1
+          AND isLatest = 1
+          AND chipModelName = #{chipModelName}
+          AND (
+            (#{type} IS NOT NULL AND #{type} != '' AND type = #{type})
+            OR
+            (type IS NULL OR type = '')
+          )
+        ORDER BY
+          CASE WHEN type = #{type} THEN 0 ELSE 1 END,
+          versionCode DESC,
+          id DESC
+        LIMIT 1
+    </select>
+
+</mapper>

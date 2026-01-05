@@ -46,6 +46,9 @@ public class WebMvcConfig implements WebMvcConfigurer {  // 实现接口而不�
             // 上传文件存储在项目根目录下的uploads文件夹中
             String uploadsPath = "file:" + basePath + File.separator + "uploads" + File.separator;
 
+            // 固件文件存储在项目根目录下的firmware文件夹中
+            String firmwarePath = "file:" + basePath + File.separator + "firmware" + File.separator;
+
             // 配置资源映射
             registry.addResourceHandler("/audio/**")
                     .addResourceLocations(audioPath);
@@ -53,6 +56,10 @@ public class WebMvcConfig implements WebMvcConfigurer {  // 实现接口而不�
             // 为上传文件添加资源映射
             registry.addResourceHandler("/uploads/**")
                     .addResourceLocations(uploadsPath);
+
+            // 为固件文件添加资源映射（OTA 下载用）
+            registry.addResourceHandler("/firmware/**")
+                    .addResourceLocations(firmwarePath);
 
         } catch (Exception e) {
             log.error("添加资源失败", e);

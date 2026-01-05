@@ -5,6 +5,7 @@ import com.xiaozhi.common.web.ResultMessage;
 import com.xiaozhi.common.web.PageFilter;
 import com.xiaozhi.dialogue.tts.factory.TtsServiceFactory;
 import com.xiaozhi.dto.param.RoleAddParam;
+import com.xiaozhi.dto.param.RolePublishParam;
 import com.xiaozhi.dto.param.RoleUpdateParam;
 import com.xiaozhi.dto.param.TestVoiceParam;
 import com.xiaozhi.dto.response.RoleDTO;
@@ -25,6 +26,7 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 角色管理
@@ -260,6 +262,36 @@ public class RoleController extends BaseController {
         } catch (Exception e) {
             logger.error(e.getMessage(), e);
             return ResultMessage.error("删除失败");
+        }
+    }
+
+    /**
+     * 覆盖式发布：选择最多2个角色作为端侧“已发布”角色。
+     *
+     * 说明：该接口不依赖设备是否在线，仅修改数据库中的 published 标记。
+     * 设备端可以随时调用 /api/device/roles/published 拉取配置。
+     */
+    @PostMapping("/publish")
+    @ResponseBody
+    @Operation(summary = "覆盖式发布角色", description = "覆盖式设置当前用户已发布到端侧的角色（最多2个）")
+    public ResultMessage publish(@Valid @RequestBody RolePublishParam param) {
+        try {
+            Integer uid = currentUserIdOrNull();
+            if (uid == null) {
+                uid = CmsUtils.getUserId();
+            }
+            if (uid == null) {
+                return ResultMessage.error("未登录或登录态异常：无法获取 userId");
+            }
+
+            List<SysRole> publishedRoles = roleService.setPublishedRoles(uid, param.getRoleIds());
+            List<RoleDTO> dtoList = publishedRoles.stream().map(DtoConverter::toRoleDTO).collect(Collectors.toList());
+            return ResultMessage.success(dtoList);
+        } catch (IllegalArgumentException ex) {
+            return ResultMessage.error(ex.getMessage());
+        } catch (Exception e) {
+            logger.error(e.getMessage(), e);
+            return ResultMessage.error("发布失败");
         }
     }
 

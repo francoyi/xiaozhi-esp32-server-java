@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * 角色操作
@@ -164,6 +166,41 @@ public class SysRoleServiceImpl extends BaseServiceImpl implements SysRoleServic
         if (userId == null) {
             return List.of();
         }
+        return roleMapper.selectPublishedByUserId(userId);
+    }
+
+    /**
+     * 覆盖式设置“已发布到端侧”的角色（最多2个；传空列表表示全部取消发布）。
+     */
+    @Override
+    public List<SysRole> setPublishedRoles(Integer userId, List<Integer> roleIds) {
+        if (userId == null) {
+            throw new IllegalArgumentException("userId 不能为空");
+        }
+
+        // 允许传 null/空 -> 取消全部发布
+        final List<Integer> normalized = (roleIds == null ? List.<Integer>of() : roleIds)
+                .stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        if (normalized.size() > 2) {
+            throw new IllegalArgumentException("最多只能发布2个角色");
+        }
+
+        // 先清空该用户全部 published
+        roleMapper.resetPublishedByUserId(userId);
+
+        // 再设置新的 published
+        if (!normalized.isEmpty()) {
+            int owned = roleMapper.countOwnedActiveRoles(userId, normalized);
+            if (owned != normalized.size()) {
+                throw new IllegalArgumentException("发布失败：存在不属于当前用户或已失效的角色");
+            }
+            roleMapper.setPublishedByRoleIds(userId, normalized);
+        }
+
         return roleMapper.selectPublishedByUserId(userId);
     }
 }

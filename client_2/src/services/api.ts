@@ -34,6 +34,8 @@ export default {
     query: '/role',
     update: '/role',
     delete: '/role',
+    // 覆盖式发布：选择最多2个角色作为“端侧可拉取”的已发布角色
+    publish: '/role/publish',
     testVoice: '/role/testVoice',
   },
   template: {

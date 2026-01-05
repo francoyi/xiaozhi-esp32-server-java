@@ -254,4 +254,32 @@
         DELETE FROM sys_role WHERE roleId = #{roleId}
     </delete>
 
+    <!-- 覆盖式发布：先清空用户所有 published，再把指定 roleIds 置为 1 -->
+    <update id="resetPublishedByUserId">
+        UPDATE sys_role
+        SET published = 0
+        WHERE userId = #{userId}
+    </update>
+
+    <update id="setPublishedByRoleIds">
+        UPDATE sys_role
+        SET published = 1
+        WHERE userId = #{userId}
+        AND roleId IN
+        <foreach collection="roleIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </update>
+
+    <select id="countOwnedActiveRoles" resultType="int">
+        SELECT COUNT(1)
+        FROM sys_role
+        WHERE userId = #{userId}
+        AND state = 1
+        AND roleId IN
+        <foreach collection="roleIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
 </mapper>

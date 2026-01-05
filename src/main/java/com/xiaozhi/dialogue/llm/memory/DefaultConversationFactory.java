@@ -21,16 +21,42 @@ public class DefaultConversationFactory implements ConversationFactory{
 
     @Override
     public Conversation initConversation(SysDevice device, SysRole role, String sessionId) {
-        Conversation conversation = switch (role.getMemoryType()) {
-            case "window"-> MessageWindowConversation.builder().chatMemory(chatMemory)
+
+        // 兜底：role 为空也不让 WS 掉线
+        if (role == null) {
+            log.warn("role is null when initConversation. deviceId={}, sessionId={}, fallback to window conversation",
+                    device != null ? device.getDeviceId() : null, sessionId);
+            return MessageWindowConversation.builder()
+                    .chatMemory(chatMemory)
+                    .maxMessages(maxMessages)
+                    .role(null)
+                    .device(device)
+                    .sessionId(sessionId)
+                    .build();
+        }
+
+        // 兜底：memoryType 为空默认 window
+        String memoryType = role.getMemoryType();
+        if (memoryType == null || memoryType.isBlank()) {
+            log.warn("role.memoryType is null/blank. roleId={}, deviceId={}, sessionId={}, fallback to 'window'",
+                    role.getRoleId(),
+                    device != null ? device.getDeviceId() : null,
+                    sessionId);
+            memoryType = "window";
+        }
+
+        return switch (memoryType) {
+            case "window" -> MessageWindowConversation.builder()
+                    .chatMemory(chatMemory)
                     .maxMessages(maxMessages)
                     .role(role)
                     .device(device)
                     .sessionId(sessionId)
                     .build();
-            default ->{
-                log.warn("系统目前不支持这类未知的记忆类型：{} ， 将启用默认的MessageWindowConversation", role.getMemoryType());
-                yield MessageWindowConversation.builder().chatMemory(chatMemory)
+            default -> {
+                log.warn("系统目前不支持这类未知的记忆类型：{} ，将启用默认的MessageWindowConversation", memoryType);
+                yield MessageWindowConversation.builder()
+                        .chatMemory(chatMemory)
                         .maxMessages(maxMessages)
                         .role(role)
                         .device(device)
@@ -38,8 +64,6 @@ public class DefaultConversationFactory implements ConversationFactory{
                         .build();
             }
         };
-        
-        return conversation;
-
     }
+
 }

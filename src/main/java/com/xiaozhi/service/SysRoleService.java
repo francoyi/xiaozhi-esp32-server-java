@@ -53,4 +53,13 @@ public interface SysRoleService {
    */
   List<SysRole> listPublishedByUserId(Integer userId);
 
+  /**
+   * 覆盖式设置用户的已发布角色（最多2个；传空列表表示全部取消发布）。
+   *
+   * @param userId  当前用户ID
+   * @param roleIds 要发布的角色ID列表
+   * @return 更新后已发布的角色列表
+   */
+  List<SysRole> setPublishedRoles(Integer userId, List<Integer> roleIds);
+
 }

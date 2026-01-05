@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import type { DeviceDTO, RoleDTO } from '../../utils/types'
 import { queryDevices } from '../../services/device'
@@ -232,10 +232,15 @@ onMounted(async () => {
   await Promise.all([loadDevices(), loadRoles()])
   if (currentDeviceId.value) connectWs(currentDeviceId.value)
 })
+
+onBeforeUnmount(() => {
+  disconnectWs()
+})
 </script>
 
 <template>
   <div class="page">
+    <!-- 顶部固定区域：始终显示 -->
     <div class="fixed-header">
       <div class="topbar">
         <div class="device-title">
@@ -267,24 +272,25 @@ onMounted(async () => {
         </div>
       </div>
 
-      <!-- 模式操作条（与截图一致：取消 + 确认） -->
+      <!-- 模式操作条（取消 + 确认） -->
       <div v-if="mode !== 'normal'" class="modebar">
         <button class="text-btn" type="button" @click="mode = 'normal'; resetSelection()">取消</button>
+
         <button
-          v-if="mode === 'delete'"
-          class="danger-btn"
-          type="button"
-          :disabled="selectedCount === 0"
-          @click="confirmDelete"
+            v-if="mode === 'delete'"
+            class="danger-btn"
+            type="button"
+            :disabled="selectedCount === 0"
+            @click="confirmDelete"
         >
           确认删除 ({{ selectedCount }})
         </button>
 
         <button
-          v-if="mode === 'publish'"
-          class="primary-btn"
-          type="button"
-          @click="confirmPublish"
+            v-if="mode === 'publish'"
+            class="primary-btn"
+            type="button"
+            @click="confirmPublish"
         >
           保存发布 ({{ selectedCount }}/2)
         </button>
@@ -296,6 +302,7 @@ onMounted(async () => {
       </div>
     </div>
 
+    <!-- 仅角色卡区域滚动 -->
     <div class="scroll-area">
       <div class="grid">
         <button class="card" type="button" @click="onCreateRole" :disabled="mode !== 'normal'">
@@ -306,11 +313,11 @@ onMounted(async () => {
         </button>
 
         <button
-          v-for="r in filteredRoles"
-          :key="String(r.roleId)"
-          class="card"
-          type="button"
-          @click="onCardClick(r)"
+            v-for="r in filteredRoles"
+            :key="String(r.roleId)"
+            class="card"
+            type="button"
+            @click="onCardClick(r)"
         >
           <!-- 右上角勾选框 -->
           <div v-if="mode !== 'normal'" class="select-box" @click.stop="toggleSelect(String(r.roleId))">
@@ -329,6 +336,7 @@ onMounted(async () => {
       </div>
     </div>
 
+    <!-- 底部固定 tabbar -->
     <div class="tabbar">
       <button class="tab active" @click="$router.push('/home')">🏠</button>
       <button class="tab" @click="$router.push('/devices')">🛠️</button>
@@ -339,18 +347,27 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+/* ✅ 关键：iOS 上比 100vh 更稳（地址栏伸缩不乱） */
 .page {
+  height: 100dvh;
   height: 100vh;
   background: #fff;
   font-family: ui-sans-serif, system-ui;
   display: flex;
   flex-direction: column;
+  overflow: hidden; /* ✅ 禁止整页滚动，只让 scroll-area 滚 */
 }
 
+/* ✅ 顶部固定（不随列表滚动） */
 .fixed-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #fff;
   padding: 18px 16px 10px;
 }
 
+/* 你的原样式 */
 .topbar {
   display: flex;
   align-items: center;
@@ -498,10 +515,14 @@ onMounted(async () => {
   width: 100%;
 }
 
+/* ✅ 核心：只让这里滚动 + 解决 flex 子项无法滚动的 min-height 坑 */
 .scroll-area {
   flex: 1;
+  min-height: 0; /* ✅ 关键：不加很多手机上 overflow 不生效 */
   overflow-y: auto;
-  padding: 10px 16px 88px;
+  -webkit-overflow-scrolling: touch; /* ✅ iOS 惯性滚动 */
+  touch-action: pan-y;               /* ✅ 允许竖向手势 */
+  padding: 10px 16px 120px;          /* ✅ 给底部 tabbar + safe-area 留空间 */
 }
 
 .grid {
@@ -596,12 +617,14 @@ onMounted(async () => {
   line-height: 1;
 }
 
+/* ✅ 底部固定 + iPhone 安全区 */
 .tabbar {
   position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
-  height: 72px;
+  height: calc(72px + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
   background: #fff;
   border-top: 1px solid #eee;
   display: flex;
@@ -629,5 +652,4 @@ onMounted(async () => {
   .section-title { font-size: 17px; padding: 9px 12px; }
   .grid { gap: 12px; }
 }
-
 </style>

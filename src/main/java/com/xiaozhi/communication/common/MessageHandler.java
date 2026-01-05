@@ -121,51 +121,83 @@ public class MessageHandler {
     private void initializeBoundDevice(ChatSession chatSession, SysDevice device) {
         String deviceId = device.getDeviceId();
         String sessionId = chatSession.getSessionId();
-        
-        //这里需要放在虚拟线程外
-        ToolsSessionHolder toolsSessionHolder = new ToolsSessionHolder(chatSession.getSessionId(),
-                device, toolsGlobalRegistry);
+
+        // 这里需要放在虚拟线程外
+        ToolsSessionHolder toolsSessionHolder = new ToolsSessionHolder(sessionId, device, toolsGlobalRegistry);
         chatSession.setFunctionSessionHolder(toolsSessionHolder);
-        // 从数据库获取角色描述。device.getRoleId()表示当前设备的当前活跃角色，或者上次退出时的活跃角色。
-        SysRole role = roleService.selectRoleById(device.getRoleId());
+
+        // 只查一次 role
+        Integer roleId = device.getRoleId();
+        SysRole role = (roleId == null) ? null : roleService.selectRoleById(roleId);
+
+        if (role == null) {
+            logger.warn("设备 roleId 无效或未配置角色，数据库查不到角色。DeviceId={}, roleId={}, sessionId={}",
+                    deviceId, roleId, sessionId);
+
+            // 选择A：直接返回，让后续走“未配置角色/验证码提示”的流程（推荐更符合业务）
+            // return;
+
+            // 选择B：不返回，也允许初始化一个“默认会话”避免 WS 掉线（前提：你的 DefaultConversationFactory 已能处理 role==null）
+            Conversation conversation = conversationFactory.initConversation(device, null, sessionId);
+            chatSession.setConversation(conversation);
+            return;
+        }
+
+        // role 存在：初始化会话（同步）
         Conversation conversation = conversationFactory.initConversation(device, role, sessionId);
         chatSession.setConversation(conversation);
 
-        //以上同步处理结束后，再启动虚拟线程进行设备初始化，确保chatSession中已设置的sysDevice信息
+        // 再启动虚拟线程做耗时初始化
         Thread.startVirtualThread(() -> {
             try {
+                // STT
                 if (role.getSttId() != null) {
                     SysConfig sttConfig = configService.selectConfigById(role.getSttId());
                     if (sttConfig != null) {
-                        sttFactory.getSttService(sttConfig);// 提前初始化，加速后续使用
+                        sttFactory.getSttService(sttConfig);
                     }
                 }
+
+                // TTS
                 if (role.getTtsId() != null) {
                     SysConfig ttsConfig = configService.selectConfigById(role.getTtsId());
                     if (ttsConfig != null) {
-                        ttsFactory.getTtsService(ttsConfig, role.getVoiceName(), role.getTtsPitch(), role.getTtsSpeed());// 提前初始化，加速后续使用
+                        ttsFactory.getTtsService(ttsConfig, role.getVoiceName(), role.getTtsPitch(), role.getTtsSpeed());
                     }
                 }
+
+                // LLM
                 if (role.getModelId() != null) {
-                    ChatModel chatModel = chatModelFactory.takeChatModel(chatSession);// 提前初始化，加速后续使用
-                    if(chatModel instanceof OpenAiChatModel){
-                        Thread.startVirtualThread(()->{
-                            //如果是openApi类型的ai，异步校验当前模型是否支持function call
-                            // 根据配置ID查询配置
-                            SysConfig config = configService.selectConfigById(role.getModelId());
-                            String model = config.getConfigName();
-                            String endpoint = config.getApiUrl();
-                            String apiKey = config.getApiKey();
-                            OpenAiLlmService openAiLlmService = new OpenAiLlmService(endpoint, apiKey, model);
-                            chatSession.setSupportFunctionCall(openAiLlmService.testFunctionCall());
+                    ChatModel chatModel = chatModelFactory.takeChatModel(chatSession);
+
+                    if (chatModel instanceof OpenAiChatModel) {
+                        Thread.startVirtualThread(() -> {
+                            try {
+                                SysConfig config = configService.selectConfigById(role.getModelId());
+                                if (config == null) {
+                                    logger.warn("模型配置不存在。DeviceId={}, roleId={}, modelId={}",
+                                            deviceId, role.getRoleId(), role.getModelId());
+                                    return;
+                                }
+                                String model = config.getConfigName();
+                                String endpoint = config.getApiUrl();
+                                String apiKey = config.getApiKey();
+
+                                OpenAiLlmService openAiLlmService = new OpenAiLlmService(endpoint, apiKey, model);
+                                chatSession.setSupportFunctionCall(openAiLlmService.testFunctionCall());
+                            } catch (Exception e) {
+                                logger.error("异步校验 function call 失败", e);
+                            }
                         });
                     }
                 }
 
                 // 更新设备状态
                 deviceService.update(new SysDevice()
-                        .setDeviceId(device.getDeviceId())
-                        .setState(chatSession instanceof WebSocketSession ? SysDevice.DEVICE_STATE_ONLINE : SysDevice.DEVICE_STATE_STANDBY)
+                        .setDeviceId(deviceId)
+                        .setState(chatSession instanceof WebSocketSession
+                                ? SysDevice.DEVICE_STATE_ONLINE
+                                : SysDevice.DEVICE_STATE_STANDBY)
                         .setLastLogin(new Date().toString()));
 
             } catch (Exception e) {
@@ -178,6 +210,7 @@ public class MessageHandler {
             }
         });
     }
+
 
     /**
      * 处理连接关闭事件.

@@ -39,11 +39,13 @@ import com.xiaozhi.dto.response.DeviceDTO;
 import com.xiaozhi.entity.SysDevice;
 import com.xiaozhi.entity.SysRole;
 import com.xiaozhi.service.SysDeviceService;
+import com.xiaozhi.service.SysFirmwareReleaseService;
 import com.xiaozhi.service.SysRoleService;
 import com.xiaozhi.service.SysUserService;
 import com.xiaozhi.utils.CmsUtils;
 import com.xiaozhi.utils.DtoConverter;
 import com.xiaozhi.utils.JsonUtil;
+import com.xiaozhi.utils.VersionCodeUtil;
 
 import cn.dev33.satoken.annotation.SaIgnore;
 import cn.dev33.satoken.stp.StpUtil;
@@ -73,6 +75,9 @@ public class DeviceController extends BaseController {
 
     @Resource
     private SysRoleService roleService;
+
+    @Resource
+    private SysFirmwareReleaseService firmwareReleaseService;
 
     @Resource
     private SysUserService userService;
@@ -530,9 +535,54 @@ public class DeviceController extends BaseController {
             serverTimeData.put("timestamp", timestamp);
             serverTimeData.put("timezone_offset", 480); // 东八区
 
-            // 设置固件信息
-            firmwareData.put("url", cmsUtils.getOtaAddress());
-            firmwareData.put("version", "1.0.0");
+            // =============================================================
+            // 固件信息（OTA 版本/机型区分）
+            // 说明：
+            // - 设备侧会定期 POST /api/device/ota，上报 chip/type/version
+            // - 服务端根据 sys_firmware_release 选择“最新且启用”的固件
+            // - 若最新版本 > 设备当前版本，则返回可升级的 url/version/sha256
+            // - 若无更新，则返回 update_available=false，并保持 url 为空
+            // =============================================================
+            String chip = device.getChipModelName();
+            String boardType = device.getType();
+            String currentVersion = device.getVersion();
+            int currentCode = VersionCodeUtil.toVersionCode(currentVersion);
+
+            var latest = firmwareReleaseService.getLatest(
+                    chip == null ? null : chip.trim().toLowerCase(),
+                    boardType
+            );
+
+            boolean updateAvailable = false;
+            if (latest != null && latest.getVersionCode() != null) {
+                updateAvailable = latest.getVersionCode() > currentCode;
+            }
+
+            firmwareData.put("update_available", updateAvailable);
+
+            if (updateAvailable && latest != null) {
+                // downloadPath 以 / 开头，则拼接 serverAddress
+                String downloadPath = latest.getDownloadPath();
+                String url;
+                if (downloadPath != null && downloadPath.startsWith("/")) {
+                    url = cmsUtils.getServerAddress() + downloadPath;
+                } else {
+                    // 兜底：如果表里直接存了绝对地址
+                    url = downloadPath;
+                }
+                firmwareData.put("url", url);
+                firmwareData.put("version", latest.getVersion());
+                if (latest.getSha256() != null && !latest.getSha256().isBlank()) {
+                    firmwareData.put("sha256", latest.getSha256());
+                }
+                if (latest.getMinSupportedCode() != null) {
+                    firmwareData.put("min_supported_code", latest.getMinSupportedCode());
+                }
+            } else {
+                // 无更新：保持兼容结构
+                firmwareData.put("url", "");
+                firmwareData.put("version", currentVersion == null ? "" : currentVersion);
+            }
 
             // 检查设备是否已绑定
             if (ObjectUtils.isEmpty(queryDevice)) {
