@@ -231,7 +231,7 @@ watch(
 </template>
 
 <style scoped>
-.page { min-height:100vh; background:#fff; padding-bottom:78px; font-family: ui-sans-serif, system-ui; }
+.page { min-height:100vh; background:#fff; padding-bottom: calc(78px + var(--safe-bottom)); font-family: ui-sans-serif, system-ui; }
 .nav { height:56px; display:flex; align-items:center; justify-content:space-between; padding:0 14px; border-bottom:1px solid #f1f1f1; }
 .back { border:none; background:transparent; font-size:26px; width:28px; cursor:pointer; }
 .title { font-size:18px; font-weight:800; }

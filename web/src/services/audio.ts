@@ -141,7 +141,15 @@ async function initAudioContext(): Promise<AudioContext | null> {
   }
 
   try {
-    const AudioContextClass = window.AudioContext || (window as unknown as Record<string, unknown>).webkitAudioContext
+    //const AudioContextClass = window.AudioContext || (window as unknown as Record<string, unknown>).webkitAudioContext
+    type AudioContextConstructor = {
+      new (contextOptions?: AudioContextOptions): AudioContext
+    }
+
+    const AudioContextClass: AudioContextConstructor =
+      window.AudioContext ||
+      (window as any).webkitAudioContext
+
     audioContext = new AudioContextClass({
       sampleRate: defaultConfig.sampleRate,
       latencyHint: 'interactive'

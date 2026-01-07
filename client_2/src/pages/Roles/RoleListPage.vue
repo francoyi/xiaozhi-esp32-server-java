@@ -124,69 +124,73 @@ function configLabel(c: ConfigDTO) {
 </script>
 
 <template>
-  <div>
-    <h2 style="margin:8px 0">Roles</h2>
+  <!-- ✅ page 作为滚动容器，并预留底部 tabbar 空间 -->
+  <div class="page">
+    <h2 class="title">Roles</h2>
 
-    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+    <div class="toolbar">
       <button @click="openCreate">New Role</button>
       <button @click="loadAll" :disabled="state==='loading'">Refresh</button>
     </div>
 
     <div v-if="state==='loading'">Loading...</div>
-    <div v-else-if="state==='error'" style="color:crimson">Error: {{ errorMsg }}</div>
+    <div v-else-if="state==='error'" class="error">Error: {{ errorMsg }}</div>
 
-    <table style="width:100%;border-collapse:collapse">
-      <thead>
-        <tr style="text-align:left;border-bottom:1px solid #ddd">
-          <th style="padding:8px">roleId</th>
-          <th style="padding:8px">roleName</th>
-          <th style="padding:8px">modelId</th>
-          <th style="padding:8px">ttsId</th>
-          <th style="padding:8px">sttId</th>
-          <th style="padding:8px">actions</th>
+    <!-- ✅ 内容区 -->
+    <div class="content">
+      <table class="table">
+        <thead>
+        <tr>
+          <th>roleId</th>
+          <th>roleName</th>
+          <th>modelId</th>
+          <th>ttsId</th>
+          <th>sttId</th>
+          <th>actions</th>
         </tr>
-      </thead>
-      <tbody>
-        <tr v-for="r in roles" :key="String(r.roleId)" style="border-bottom:1px solid #f0f0f0">
-          <td style="padding:8px;font-family:ui-monospace,SFMono-Regular">{{ r.roleId }}</td>
-          <td style="padding:8px">{{ r.roleName || '-' }}</td>
-          <td style="padding:8px">{{ r.modelId ?? '-' }}</td>
-          <td style="padding:8px">{{ r.ttsId ?? '-' }}</td>
-          <td style="padding:8px">{{ r.sttId ?? '-' }}</td>
-          <td style="padding:8px;display:flex;gap:8px;flex-wrap:wrap">
+        </thead>
+        <tbody>
+        <tr v-for="r in roles" :key="String(r.roleId)">
+          <td class="mono">{{ r.roleId }}</td>
+          <td>{{ r.roleName || '-' }}</td>
+          <td>{{ r.modelId ?? '-' }}</td>
+          <td>{{ r.ttsId ?? '-' }}</td>
+          <td>{{ r.sttId ?? '-' }}</td>
+          <td class="actions">
             <button @click="openEdit(r)">Edit</button>
             <button @click="onDelete(r.roleId)">Delete</button>
           </td>
         </tr>
 
         <tr v-if="roles.length===0 && state!=='loading'">
-          <td colspan="6" style="padding:12px;opacity:.7">暂无角色</td>
+          <td colspan="6" class="empty">暂无角色</td>
         </tr>
-      </tbody>
-    </table>
+        </tbody>
+      </table>
+    </div>
 
-    <div v-if="showEditor"
-         style="position:fixed;inset:0;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;padding:16px">
-      <div style="background:#fff;border-radius:10px;max-width:920px;width:100%;padding:16px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+    <!-- ✅ 编辑弹窗 -->
+    <div v-if="showEditor" class="mask">
+      <div class="modal">
+        <div class="modal-header">
           <strong>{{ editorTitle }}</strong>
           <button @click="showEditor=false">X</button>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-grid">
           <label>
-            <div style="font-size:12px;opacity:.8">roleName *</div>
-            <input v-model="form.roleName" style="width:100%;padding:8px" />
+            <div class="label">roleName *</div>
+            <input v-model="form.roleName" class="input" />
           </label>
 
           <label>
-            <div style="font-size:12px;opacity:.8">roleDesc</div>
-            <input v-model="form.roleDesc" style="width:100%;padding:8px" />
+            <div class="label">roleDesc</div>
+            <input v-model="form.roleDesc" class="input" />
           </label>
 
           <label>
-            <div style="font-size:12px;opacity:.8">modelId (LLM Config)</div>
-            <select v-model="form.modelId" style="width:100%;padding:8px">
+            <div class="label">modelId (LLM Config)</div>
+            <select v-model="form.modelId" class="input">
               <option :value="null">-- none --</option>
               <option v-for="c in llmConfigs" :key="String(c.configId)" :value="c.configId">
                 {{ configLabel(c) }}
@@ -195,8 +199,8 @@ function configLabel(c: ConfigDTO) {
           </label>
 
           <label>
-            <div style="font-size:12px;opacity:.8">ttsId (TTS Config)</div>
-            <select v-model="form.ttsId" style="width:100%;padding:8px">
+            <div class="label">ttsId (TTS Config)</div>
+            <select v-model="form.ttsId" class="input">
               <option :value="null">-- none --</option>
               <option v-for="c in ttsConfigs" :key="String(c.configId)" :value="c.configId">
                 {{ configLabel(c) }}
@@ -205,8 +209,8 @@ function configLabel(c: ConfigDTO) {
           </label>
 
           <label>
-            <div style="font-size:12px;opacity:.8">sttId (STT Config)</div>
-            <select v-model="form.sttId" style="width:100%;padding:8px">
+            <div class="label">sttId (STT Config)</div>
+            <select v-model="form.sttId" class="input">
               <option :value="null">-- none --</option>
               <option v-for="c in sttConfigs" :key="String(c.configId)" :value="c.configId">
                 {{ configLabel(c) }}
@@ -215,44 +219,178 @@ function configLabel(c: ConfigDTO) {
           </label>
 
           <label>
-            <div style="font-size:12px;opacity:.8">temperature</div>
-            <input v-model.number="form.temperature" type="number" step="0.1" style="width:100%;padding:8px" />
+            <div class="label">temperature</div>
+            <input v-model.number="form.temperature" type="number" step="0.1" class="input" />
           </label>
 
           <label>
-            <div style="font-size:12px;opacity:.8">topP</div>
-            <input v-model.number="form.topP" type="number" step="0.05" style="width:100%;padding:8px" />
+            <div class="label">topP</div>
+            <input v-model.number="form.topP" type="number" step="0.05" class="input" />
           </label>
 
           <label>
-            <div style="font-size:12px;opacity:.8">voiceName</div>
-            <input v-model="form.voiceName" style="width:100%;padding:8px" />
+            <div class="label">voiceName</div>
+            <input v-model="form.voiceName" class="input" />
           </label>
 
           <label>
-            <div style="font-size:12px;opacity:.8">ttsSpeed</div>
-            <input v-model.number="form.ttsSpeed" type="number" step="0.1" style="width:100%;padding:8px" />
+            <div class="label">ttsSpeed</div>
+            <input v-model.number="form.ttsSpeed" type="number" step="0.1" class="input" />
           </label>
 
           <label>
-            <div style="font-size:12px;opacity:.8">ttsPitch</div>
-            <input v-model.number="form.ttsPitch" type="number" step="0.1" style="width:100%;padding:8px" />
+            <div class="label">ttsPitch</div>
+            <input v-model.number="form.ttsPitch" type="number" step="0.1" class="input" />
           </label>
 
-          <label style="grid-column:1 / -1">
-            <div style="font-size:12px;opacity:.8">systemPrompt</div>
-            <textarea v-model="form.systemPrompt" rows="4" style="width:100%;padding:8px"></textarea>
+          <label class="full">
+            <div class="label">systemPrompt</div>
+            <textarea v-model="form.systemPrompt" rows="4" class="input"></textarea>
           </label>
         </div>
 
-        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+        <div class="modal-actions">
           <button @click="save">Save</button>
         </div>
 
-        <div style="margin-top:10px;font-size:12px;opacity:.75">
+        <div class="hint">
           保存 Role 后，去 <b>Devices</b> 页面把设备的 roleId 切到这个 roleId，端侧重连后生效。
         </div>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* ✅ 你底部 tabbar 多高，就填多高；先用 64px，够用 */
+.page {
+  --tabbar-h: 64px;
+
+  height: 100vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+
+  /* ✅ 关键：给 fixed tabbar + iPhone 安全区让位 */
+  padding: 12px 12px calc(var(--tabbar-h) + env(safe-area-inset-bottom)) 12px;
+  box-sizing: border-box;
+}
+
+.title {
+  margin: 8px 0;
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.error {
+  color: crimson;
+}
+
+.content {
+  width: 100%;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table thead tr {
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+
+.table th,
+.table td {
+  padding: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.empty {
+  padding: 12px;
+  opacity: 0.7;
+}
+
+/* 弹窗 */
+.mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.modal {
+  background: #fff;
+  border-radius: 10px;
+  max-width: 920px;
+  width: 100%;
+  padding: 16px;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 640px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.label {
+  font-size: 12px;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+
+.input {
+  width: 100%;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+.full {
+  grid-column: 1 / -1;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.hint {
+  margin-top: 10px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+</style>

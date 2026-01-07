@@ -6,6 +6,7 @@ body,
 
 body {
   margin: 0;
+  overflow-x: hidden;
   overflow: hidden; /* 禁止整页滚动：让页面内部的 scroll-area 来滚 */
 }
 
@@ -13,4 +14,22 @@ body {
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+:root {
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+img, video, canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+input, select, textarea, button {
+  font-size: 16px; /* prevent iOS auto-zoom */
 }

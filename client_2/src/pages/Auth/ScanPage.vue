@@ -71,6 +71,7 @@ onMounted(async () => {
 <style scoped>
 .auth {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -79,6 +80,7 @@ onMounted(async () => {
 
 .card {
   width: 100%;
+  max-width: 100%;
   max-width: 420px;
   border: 1px solid #eee;
   border-radius: 12px;

@@ -350,7 +350,6 @@ onBeforeUnmount(() => {
 /* ✅ 关键：iOS 上比 100vh 更稳（地址栏伸缩不乱） */
 .page {
   height: 100dvh;
-  height: 100vh;
   background: #fff;
   font-family: ui-sans-serif, system-ui;
   display: flex;
@@ -522,7 +521,7 @@ onBeforeUnmount(() => {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch; /* ✅ iOS 惯性滚动 */
   touch-action: pan-y;               /* ✅ 允许竖向手势 */
-  padding: 10px 16px 120px;          /* ✅ 给底部 tabbar + safe-area 留空间 */
+  padding: 10px 16px 16px;          /* ✅ 给底部 tabbar + safe-area 留空间 */
 }
 
 .grid {
@@ -619,10 +618,6 @@ onBeforeUnmount(() => {
 
 /* ✅ 底部固定 + iPhone 安全区 */
 .tabbar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
   height: calc(72px + env(safe-area-inset-bottom));
   padding-bottom: env(safe-area-inset-bottom);
   background: #fff;
@@ -630,6 +625,7 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-around;
+  flex-shrink: 0;
 }
 
 .tab {

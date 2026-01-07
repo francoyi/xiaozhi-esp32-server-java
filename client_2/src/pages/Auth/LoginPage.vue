@@ -1,5 +1,5 @@
-<<script setup lang="ts">
-import { computed, ref } from 'vue'
+<script setup lang="ts">
+import { computed, ref, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../../services/api'
 import { request } from '../../services/request'
@@ -25,24 +25,19 @@ async function submit() {
       password: password.value.trim(),
     })
 
-    // 兼容多种登录返回：
-    // - ResultMessage.success(LoginResponseDTO): data.token / data.tokenValue
-    // - 直接返回 token: res.data.token
-    // - 写在响应头里: satoken / authorization
     const body: any = res.data
     const data: any = body?.data
     const headerToken = (res.headers as any)?.satoken || (res.headers as any)?.authorization
     const token =
-      data?.token ||
-      data?.tokenValue ||
-      data?.accessToken ||
-      data?.saToken ||
-      body?.token ||
-      headerToken
+        data?.token ||
+        data?.tokenValue ||
+        data?.accessToken ||
+        data?.saToken ||
+        body?.token ||
+        headerToken
 
     if (!token) throw new Error('登录成功但未返回 token（请检查后端登录接口返回）')
 
-    // 统一存「裸 token」：请求拦截器会自动补 Bearer
     const tokenStr = String(token).replace(/^Bearer\s+/i, '')
     authStore.setToken(tokenStr)
 
@@ -52,9 +47,13 @@ async function submit() {
       try {
         await request.post(api.device.scanBind, { code })
       } catch {
-        // 绑定失败不阻断登录：例如设备已绑定到本账号 / 或已被他人绑定
+        // 绑定失败不阻断登录
       }
     }
+
+    // ✅ 关键：强制收起键盘 + 退出输入态，避免 iOS 缩放状态带到下一页
+    ;(document.activeElement as HTMLElement | null)?.blur?.()
+    await nextTick()
 
     router.push('/home')
   } catch (e: any) {
@@ -77,8 +76,19 @@ function goRegister() {
       <div class="subtitle">设备激活</div>
 
       <div class="form">
-        <input class="input" v-model="username" placeholder="输入用户名" autocomplete="username" />
-        <input class="input" v-model="password" placeholder="输入密码" type="password" autocomplete="current-password" />
+        <input
+            class="input"
+            v-model="username"
+            placeholder="输入用户名"
+            autocomplete="username"
+        />
+        <input
+            class="input"
+            v-model="password"
+            placeholder="输入密码"
+            type="password"
+            autocomplete="current-password"
+        />
 
         <button class="primary" :disabled="!canSubmit" @click="submit">
           {{ loading ? '登录中…' : '登录' }}
@@ -94,7 +104,7 @@ function goRegister() {
 
 <style scoped>
 .page {
-  min-height: 100vh;
+  min-height: 100dvh;
   background: #fff;
   font-family: ui-sans-serif, system-ui;
   display: grid;
@@ -135,7 +145,9 @@ function goRegister() {
   border: 1px solid #e9e9e9;
   padding: 0 14px;
   outline: none;
-  font-size: 14px;
+
+  /* ✅ 关键：iOS 输入框字体 < 16px 会触发页面自动放大 */
+  font-size: 16px;
 }
 
 .primary {

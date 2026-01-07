@@ -48,57 +48,35 @@ const voskConfigId = computed(() => {
 
 const sttExtraConfigs = computed(() => sttConfigs.value.filter(c => !isVoskConfig(c)))
 
-// Web Speech API 音色列表
+// 音色列表（对齐 web 端：使用 edge-tts 的 ShortName / voiceId）
 const voiceOptions = ref<VoiceOption[]>([])
 
-function normalizeVoice(v: SpeechSynthesisVoice): VoiceOption {
-  const lang = v.lang || ''
-  const n = (v.name || '')
-  const preferred = /Xiaoxiao/i.test(n) ? 'zh-CN-XiaoxiaoNeural'
-    : /Xiaoyi/i.test(n) ? 'zh-CN-XiaoyiNeural'
-    : /Yunjian/i.test(n) ? 'zh-CN-YunjianNeural'
-    : /Yunxi/i.test(n) ? 'zh-CN-YunxiNeural'
-    : /Yunxia/i.test(n) ? 'zh-CN-YunxiaNeural'
-    : /Yunyang/i.test(n) ? 'zh-CN-YunyangNeural'
-    : ''
-  return { label: `${n}${lang ? ' (' + lang + ')' : ''}`, value: preferred || v.voiceURI || n, lang }
-}
-
-function pickDefaultVoice(list: VoiceOption[]): string {
-  const xiaoxiao = list.find(v => v.lang?.toLowerCase() === 'zh-cn' && /xiaoxiao/i.test(v.label))
-  if (xiaoxiao) return xiaoxiao.value
-  const zh = list.find(v => v.lang?.toLowerCase() === 'zh-cn')
-  if (zh) return zh.value
-  return list[0]?.value || ''
-}
-
-let detachVoicesChanged: null | (() => void) = null
-
-function loadBrowserVoicesOnce() {
-  if (typeof window === 'undefined') return
-  const ss = (window as any).speechSynthesis as SpeechSynthesis | undefined
-  if (!ss) {
-    voiceOptions.value = [...FALLBACK_VOICES]
-    if (!form.voiceName) form.voiceName = pickDefaultVoice(voiceOptions.value)
-    return
-  }
-
-  const fill = () => {
-    const voices = ss.getVoices?.() || []
-    voiceOptions.value = voices.length > 0 ? voices.map(normalizeVoice) : [...FALLBACK_VOICES]
-    if (!form.voiceName) form.voiceName = pickDefaultVoice(voiceOptions.value)
-  }
-
-  fill()
-  const handler = () => fill()
+async function loadEdgeVoices() {
   try {
-    ss.addEventListener?.('voiceschanged', handler)
-    detachVoicesChanged = () => ss.removeEventListener?.('voiceschanged', handler)
+    const res = await fetch('/static/assets/edgeVoicesList.json')
+    if (!res.ok) throw new Error('load edge voices failed')
+    const data = await res.json()
+
+    // 兼容 edgeVoicesList.json 结构
+    // 只取中文语音，并将 value 设为 ShortName（edge-tts 只认这个）
+    const list: VoiceOption[] = (Array.isArray(data) ? data : [])
+      .filter((v: any) => typeof v?.Locale === 'string' && v.Locale.includes('zh') && typeof v?.ShortName === 'string')
+      .sort((a: any, b: any) => String(a.Locale).localeCompare(String(b.Locale)))
+      .map((v: any) => {
+        const parts = String(v.ShortName).split('-')
+        let name = parts[2] || ''
+        if (name.endsWith('Neural')) name = name.slice(0, -6)
+        return { label: `${name} (${v.Locale})`, value: String(v.ShortName), lang: String(v.Locale) }
+      })
+
+    voiceOptions.value = list.length ? list : [...FALLBACK_VOICES]
   } catch {
-    ;(ss as any).onvoiceschanged = handler
-    detachVoicesChanged = () => {
-      try { (ss as any).onvoiceschanged = null } catch {}
-    }
+    voiceOptions.value = [...FALLBACK_VOICES]
+  }
+
+  // 默认值
+  if (!form.voiceName) {
+    form.voiceName = voiceOptions.value[0]?.value || ''
   }
 }
 
@@ -146,8 +124,7 @@ function configLabel(c: ConfigDTO) {
 async function loadAll() {
   state.value = 'loading'
   errorMsg.value = ''
-  try {
-    loadBrowserVoicesOnce()
+  try {    await loadEdgeVoices()
     const [cRes, tRes] = await Promise.all([
       queryConfigs({ pageNum: 1, pageSize: 200 }),
       queryTemplates({ pageNum: 1, pageSize: 200 }),
@@ -169,6 +146,8 @@ async function onCreate() {
     const payload: any = { ...form }
     payload.memoryType = Number(payload.memoryTypeUi || 0)
     delete payload.memoryTypeUi
+    // 对齐 web 端：edge 语音使用 ttsId = -1（后端会落库为 null，表示 edge）
+    payload.ttsId = -1
     await addRole(payload)
     alert('已创建')
     router.replace('/home')
@@ -178,7 +157,7 @@ async function onCreate() {
 }
 
 onMounted(loadAll)
-onUnmounted(() => { try { detachVoicesChanged?.() } catch {} })
+onUnmounted(() => {})
 </script>
 
 <template>
@@ -265,21 +244,151 @@ onUnmounted(() => { try { detachVoicesChanged?.() } catch {} })
 </template>
 
 <style scoped>
-.page{ min-height:100vh; background:#fff; font-family:ui-sans-serif,system-ui; }
-.header{ position:sticky; top:0; z-index:10; background:#fff; display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid #f0f0f0; }
-.back{ width:36px; height:36px; border-radius:12px; border:1px solid #eee; background:#fafafa; }
-.title{ font-size:18px; font-weight:700; }
-.spacer{ flex:1; }
-.hint{ padding:18px 16px; color:#666; }
-.hint.error{ color:#c62828; }
-.form{ padding:14px 16px 120px; }
-.field{ margin-bottom:14px; }
-.label{ font-size:14px; font-weight:700; margin-bottom:8px; }
-.input,.textarea,.select{ width:100%; border:1px solid #eee; border-radius:14px; background:#fafafa; padding:12px 14px; font-size:14px; outline:none; }
-.textarea{ min-height:92px; resize:vertical; }
-.sub{ margin-top:8px; }
-.footer{ position:fixed; left:0; right:0; bottom:0; background:#fff; padding:14px 16px; display:flex; gap:12px; border-top:1px solid #f0f0f0; }
-.danger{ flex:1; height:44px; border-radius:14px; border:none; background:#ffe9e9; color:#c62828; font-weight:700; }
-.primary{ flex:2; height:44px; border-radius:14px; border:none; background:#111; color:#fff; font-weight:700; }
-.primary:disabled{ opacity:0.4; }
+/* Page layout */
+.page {
+  height: 100vh;
+  background: #fff;
+  font-family: ui-sans-serif, system-ui;
+
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  /* 给 fixed footer 让位（宁可多一点） */
+  --footer-safe: calc(110px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Header */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #fff;
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  padding: 14px 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.back {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid #eee;
+  background: #fafafa;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* States */
+.hint {
+  padding: 18px 16px;
+  color: #666;
+}
+
+.hint.error {
+  color: #c62828;
+}
+
+/* Form scroll area */
+.form {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+
+  padding: 14px 16px var(--footer-safe);
+}
+
+/* Fields */
+.field {
+  margin-bottom: 14px;
+}
+
+.label {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+/* Inputs (iOS: font-size >= 16px to avoid auto-zoom) */
+.input,
+.textarea,
+.select {
+  width: 100%;
+  box-sizing: border-box;
+
+  border: 1px solid #eee;
+  border-radius: 14px;
+  background: #fafafa;
+
+  padding: 12px 14px;
+  font-size: 16px;
+  line-height: 1.2;
+  outline: none;
+
+  -webkit-text-size-adjust: 100%;
+}
+
+.textarea {
+  min-height: 92px;
+  resize: vertical;
+}
+
+.sub {
+  margin-top: 8px;
+}
+
+/* Fixed footer */
+.footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+
+  background: #fff;
+  border-top: 1px solid #f0f0f0;
+
+  display: flex;
+  gap: 12px;
+
+  padding: 14px 16px;
+  padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+}
+
+.danger {
+  flex: 1;
+  height: 44px;
+  border-radius: 14px;
+  border: none;
+
+  background: #ffe9e9;
+  color: #c62828;
+  font-weight: 700;
+}
+
+.primary {
+  flex: 2;
+  height: 44px;
+  border-radius: 14px;
+  border: none;
+
+  background: #111;
+  color: #fff;
+  font-weight: 700;
+}
+
+.primary:disabled {
+  opacity: 0.4;
+}
 </style>
+

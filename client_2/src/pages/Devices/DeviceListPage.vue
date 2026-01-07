@@ -200,7 +200,8 @@ function deviceCoverUrl(d: DeviceDTO) {
 <style scoped>
 .page {
   min-height: 100vh;
-  padding: 18px 16px 78px;
+  min-height: 100dvh;
+  padding: 18px 16px calc(78px + var(--safe-bottom));
   background: #fff;
   font-family: ui-sans-serif, system-ui;
 }

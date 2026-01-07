@@ -45,7 +45,7 @@ function logout() {
 </template>
 
 <style scoped>
-.page { min-height:100vh; background:#fff; padding-bottom:78px; font-family: ui-sans-serif, system-ui; }
+.page { min-height:100vh; background:#fff; padding-bottom: calc(78px + var(--safe-bottom)); font-family: ui-sans-serif, system-ui; }
 .nav { height:56px; display:flex; align-items:center; justify-content:space-between; padding:0 14px; border-bottom:1px solid #f1f1f1; }
 .title { font-size:18px; font-weight:800; }
 .content { padding:18px; display:flex; flex-direction:column; gap:14px; }

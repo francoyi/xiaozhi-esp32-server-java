@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 public class AudioUtils {
-    public static final String AUDIO_PATH = "audio/";
+    public static final String AUDIO_PATH = "/opt/xiaozhi/app/audio/";
     private static final Logger logger = org.slf4j.LoggerFactory.getLogger(AudioUtils.class);
     public static final int FRAME_SIZE = 960;
     public static final int SAMPLE_RATE = 16000; // 采样率
@@ -104,7 +104,14 @@ public class AudioUtils {
         }
     }
 
-    public static String saveAsWav(byte[] audio) {
+//    public static String saveAsWav(byte[] audio) throws IOException {
+//        String uuid = UUID.randomUUID().toString().replace("-", "");
+//        Path path = Path.of(AUDIO_PATH, uuid + ".wav");
+//        saveAsWav(path, audio);
+//        return path.toString();
+//    }
+
+    public static String saveAsWav(byte[] audio) throws IOException {
         String uuid = UUID.randomUUID().toString().replace("-", "");
         String fileName = uuid + ".wav";
         Path path = Path.of(AUDIO_PATH , fileName);
@@ -117,47 +124,74 @@ public class AudioUtils {
      * @param audioData 音频数据
      * @return 文件名
      */
-    public static void saveAsWav(Path path, byte[] audioData) {
+//    public static void saveAsWav(Path path, byte[] audioData) {
+//
+//        // WAV文件参数
+//        int bitsPerSample = 16; // 16位采样
+//
+//        try {
+//            // 确保音频目录存在
+//            Files.createDirectories(path.getParent());
+//
+//            try (FileOutputStream fos = new FileOutputStream(path.toFile());
+//                 DataOutputStream dos = new DataOutputStream(fos)) {
+//
+//                // 写入WAV文件头
+//                // RIFF头
+//                dos.writeBytes("RIFF");
+//                dos.writeInt(Integer.reverseBytes(36 + audioData.length)); // 文件长度
+//                dos.writeBytes("WAVE");
+//
+//                // fmt子块
+//                dos.writeBytes("fmt ");
+//                dos.writeInt(Integer.reverseBytes(16)); // 子块大小
+//                dos.writeShort(Short.reverseBytes((short) 1)); // 音频格式 (1 = PCM)
+//                dos.writeShort(Short.reverseBytes((short) CHANNELS)); // 通道数
+//                dos.writeInt(Integer.reverseBytes(SAMPLE_RATE)); // 采样率
+//                dos.writeInt(Integer.reverseBytes(SAMPLE_RATE * CHANNELS * bitsPerSample / 8)); // 字节率
+//                dos.writeShort(Short.reverseBytes((short) (CHANNELS * bitsPerSample / 8))); // 块对齐
+//                dos.writeShort(Short.reverseBytes((short) bitsPerSample)); // 每个样本的位数
+//
+//                // data子块
+//                dos.writeBytes("data");
+//                dos.writeInt(Integer.reverseBytes(audioData.length)); // 数据大小
+//
+//                // 写入音频数据
+//                dos.write(audioData);
+//            }
+//        } catch (FrameRecorder.Exception e) {
+//            logger.error("编码WAV时发生错误", e);
+//        } catch (IOException e) {
+//            logger.error("写入WAV文件时发生错误", e);
+//        }
+//    }
 
-        // WAV文件参数
-        int bitsPerSample = 16; // 16位采样
+    public static void saveAsWav(Path path, byte[] audioData) throws IOException {
+        int bitsPerSample = 16;
+        Files.createDirectories(path.getParent());
 
-        try {
-            // 确保音频目录存在
-            Files.createDirectories(path.getParent());
+        try (FileOutputStream fos = new FileOutputStream(path.toFile());
+             DataOutputStream dos = new DataOutputStream(fos)) {
 
-            try (FileOutputStream fos = new FileOutputStream(path.toFile());
-                 DataOutputStream dos = new DataOutputStream(fos)) {
+            dos.writeBytes("RIFF");
+            dos.writeInt(Integer.reverseBytes(36 + audioData.length));
+            dos.writeBytes("WAVE");
 
-                // 写入WAV文件头
-                // RIFF头
-                dos.writeBytes("RIFF");
-                dos.writeInt(Integer.reverseBytes(36 + audioData.length)); // 文件长度
-                dos.writeBytes("WAVE");
+            dos.writeBytes("fmt ");
+            dos.writeInt(Integer.reverseBytes(16));
+            dos.writeShort(Short.reverseBytes((short) 1));
+            dos.writeShort(Short.reverseBytes((short) CHANNELS));
+            dos.writeInt(Integer.reverseBytes(SAMPLE_RATE));
+            dos.writeInt(Integer.reverseBytes(SAMPLE_RATE * CHANNELS * bitsPerSample / 8));
+            dos.writeShort(Short.reverseBytes((short) (CHANNELS * bitsPerSample / 8)));
+            dos.writeShort(Short.reverseBytes((short) bitsPerSample));
 
-                // fmt子块
-                dos.writeBytes("fmt ");
-                dos.writeInt(Integer.reverseBytes(16)); // 子块大小
-                dos.writeShort(Short.reverseBytes((short) 1)); // 音频格式 (1 = PCM)
-                dos.writeShort(Short.reverseBytes((short) CHANNELS)); // 通道数
-                dos.writeInt(Integer.reverseBytes(SAMPLE_RATE)); // 采样率
-                dos.writeInt(Integer.reverseBytes(SAMPLE_RATE * CHANNELS * bitsPerSample / 8)); // 字节率
-                dos.writeShort(Short.reverseBytes((short) (CHANNELS * bitsPerSample / 8))); // 块对齐
-                dos.writeShort(Short.reverseBytes((short) bitsPerSample)); // 每个样本的位数
-
-                // data子块
-                dos.writeBytes("data");
-                dos.writeInt(Integer.reverseBytes(audioData.length)); // 数据大小
-
-                // 写入音频数据
-                dos.write(audioData);
-            }
-        } catch (FrameRecorder.Exception e) {
-            logger.error("编码WAV时发生错误", e);
-        } catch (IOException e) {
-            logger.error("写入WAV文件时发生错误", e);
+            dos.writeBytes("data");
+            dos.writeInt(Integer.reverseBytes(audioData.length));
+            dos.write(audioData);
         }
     }
+
 
     /**
      * 合并多个音频文件为一个WAV文件
@@ -347,11 +381,23 @@ public class AudioUtils {
             //     }
             // }
 
-            // 等待进程完成
+            //新增代码
+            String error;
+            try (InputStream es = process.getErrorStream()) {
+                error = new String(es.readAllBytes());
+            }
+
             int exitCode = process.waitFor();
             if (exitCode != 0) {
-                throw new IOException("ffmpeg转换失败，退出代码: " + exitCode);
+                logger.error("ffmpeg 转换失败 exitCode={}, mp3Path={}, stderr={}", exitCode, mp3Path, error);
+                throw new IOException("ffmpeg 转换失败: " + error);
             }
+
+            // 等待进程完成
+//            int exitCode = process.waitFor();
+//            if (exitCode != 0) {
+//                throw new IOException("ffmpeg转换失败，退出代码: " + exitCode);
+//            }
 
             // 读取生成的PCM文件
             byte[] pcmData = Files.readAllBytes(Paths.get(tempPcmPath));

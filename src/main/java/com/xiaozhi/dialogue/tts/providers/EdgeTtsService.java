@@ -91,19 +91,63 @@ public class EdgeTtsService implements TtsService {
                 .formatMp3()
                 .trans();
 
-        String fullPath = outputPath + audioFilePath;
 
-        // 1. 将MP3转换为PCM (已经设置为16kHz采样率和单声道)
-        byte[] pcmData = AudioUtils.mp3ToPcm(fullPath);
 
-        // 2. 将PCM转换回WAV (使用AudioUtils中的设置：16kHz, 单声道, 160kbps)
+
+
+        // audioFilePath 可能是相对/绝对/包含 outputPath，修改后代码
+        java.nio.file.Path mp3Path = java.nio.file.Paths.get(audioFilePath);
+        if (!mp3Path.isAbsolute()) {
+            mp3Path = java.nio.file.Paths.get(outputPath).resolve(audioFilePath).normalize();
+        }
+
+        logger.info("EdgeTTS trans()返回: audioFilePath={}, outputPath={}, mp3Path={}",
+                audioFilePath, outputPath, mp3Path);
+
+        if (!java.nio.file.Files.exists(mp3Path)) {
+            throw new java.io.FileNotFoundException("EdgeTTS 生成的 mp3 文件不存在: " + mp3Path);
+        }
+        long size = java.nio.file.Files.size(mp3Path);
+        logger.info("EdgeTTS mp3 文件大小: {} bytes, path={}", size, mp3Path);
+        if (size <= 0) {
+            throw new java.io.IOException("EdgeTTS mp3 文件大小为0: " + mp3Path);
+        }
+
+        // 1) mp3 -> pcm
+        byte[] pcmData = AudioUtils.mp3ToPcm(mp3Path.toString());
+
+        // 2) pcm -> wav
         String resampledFilePath = AudioUtils.saveAsWav(pcmData);
 
-        // 3. 删除原始文件
-        Files.deleteIfExists(Paths.get(fullPath));
-
-        // 4. 返回重采样后的文件路径
+        // 3) 调试阶段：先不要删 mp3，等你确认完全正常后再恢复删除
+        // Files.deleteIfExists(mp3Path);
         return resampledFilePath;
+
+
+
+
+
+
+
+
+
+
+
+        //* 原代码*
+//        String fullPath = outputPath + audioFilePath;
+//
+//        // 1. 将MP3转换为PCM (已经设置为16kHz采样率和单声道)
+//        byte[] pcmData = AudioUtils.mp3ToPcm(fullPath);
+//
+//        // 2. 将PCM转换回WAV (使用AudioUtils中的设置：16kHz, 单声道, 160kbps)
+//        String resampledFilePath = AudioUtils.saveAsWav(pcmData);
+//
+//        // 3. 删除原始文件
+//        Files.deleteIfExists(Paths.get(fullPath));
+//
+//        // 4. 返回重采样后的文件路径
+//        return resampledFilePath;
+
     }
 
 }

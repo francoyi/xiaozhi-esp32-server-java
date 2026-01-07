@@ -18,12 +18,6 @@ const canSubmit = computed(() => {
   return username.value.trim().length > 0 && password.value.trim().length > 0 && !loading.value
 })
 
-/**
- * ✅ 极简注册：仅用户名 + 密码
- * - 调用后端扫码注册接口 /user/scan-register
- * - 返回结构与 /login 一致：ResultMessage.success(LoginResponseDTO)
- * - 若当前是扫码进入（/register?code=XXXX），注册并登录后自动 scan-bind
- */
 async function submit() {
   if (!canSubmit.value) return
   if (confirmPassword.value && confirmPassword.value.trim() !== password.value.trim()) {
@@ -44,7 +38,6 @@ async function submit() {
     if (token) authStore.setToken(String(token))
     if (userId) authStore.setUserId(userId)
 
-    // 扫码进入：自动绑定设备（不影响注册主流程）
     const scanCode = (route.query.code as string) || ''
     if (scanCode) {
       try {
@@ -65,6 +58,7 @@ async function submit() {
 </script>
 
 <template>
+  <!-- ✅ 改成：可滚动页面容器（不强制垂直居中） -->
   <div class="page">
     <div class="center">
       <div class="brand">LazyCat AI</div>
@@ -88,21 +82,35 @@ async function submit() {
 </template>
 
 <style scoped>
+/* ✅ 关键：让页面自己滚动，避免 iOS 100vh + 键盘导致“滑不动/挡住” */
 .page {
   min-height: 100vh;
+  min-height: 100dvh;
+
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+
   background: #fff;
   font-family: ui-sans-serif, system-ui;
-  display: grid;
-  place-items: center;
-  padding: 20px;
+
+  /* ✅ 顶部/底部安全区 + 额外留白，避免被 Safari/底部手势条影响 */
+  padding: calc(24px + env(safe-area-inset-top))
+  20px
+  calc(28px + env(safe-area-inset-bottom))
+  20px;
+
+  box-sizing: border-box;
 }
 
+/* ✅ 只做水平居中，不强制垂直居中（让内容自然往下排，键盘弹出也不乱） */
 .center {
   width: 100%;
   max-width: 380px;
+  margin: 0 auto;
   text-align: center;
 }
 
+/* 视觉样式保持你的原风格 */
 .brand {
   font-size: 34px;
   font-weight: 800;
@@ -130,8 +138,10 @@ async function submit() {
   border: 1px solid #e9e9e9;
   padding: 0 14px;
   outline: none;
-  font-size: 14px;
+  font-size: 16px;            /* ✅ 关键：>=16px 禁止 iOS 自动放大 */
+  -webkit-text-size-adjust: 100%; /* ✅ 防止 Safari 额外字体调整 */
 }
+
 
 .primary {
   height: 48px;
@@ -145,15 +155,16 @@ async function submit() {
   margin-top: 6px;
 }
 .primary:disabled {
-  opacity: .35;
+  opacity: 0.35;
   cursor: not-allowed;
 }
+
 .link {
   border: none;
   background: transparent;
   cursor: pointer;
   font-size: 13px;
-  opacity: .75;
+  opacity: 0.75;
   margin-top: 6px;
 }
 </style>
