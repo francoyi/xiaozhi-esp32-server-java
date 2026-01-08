@@ -80,7 +80,14 @@ public class XfyunSttService implements SttService {
         }
         List<Text> resultSegments = new ArrayList<>();
         // 将原始音频数据转换为MP3格式并保存（用于调试）
-        String fileName = AudioUtils.saveAsWav(audioData);
+        String fileName;
+        try {
+            fileName = AudioUtils.saveAsWav(audioData);
+        } catch (java.io.IOException e) {
+            logger.error("保存WAV失败", e);
+            return null; // 或者 return ""; 看你 recognition() 期望的失败返回
+        }
+
         File file = new File(fileName);
         CountDownLatch recognitionLatch = new CountDownLatch(1);
         try {

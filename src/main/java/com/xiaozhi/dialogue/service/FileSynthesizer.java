@@ -61,6 +61,10 @@ public class FileSynthesizer extends ThreadSynthesizer  {
             // TODO 超时须在ttsFactory里设置。
             String audioPath = ttsService.textToSpeech(text);
             logger.debug("executeTtsTask audioPath:{}", audioPath);
+            java.nio.file.Path p = java.nio.file.Path.of(audioPath);
+            if (!java.nio.file.Files.exists(p) || java.nio.file.Files.size(p) <= 44) {
+                throw new java.io.FileNotFoundException("TTS 返回音频不存在或过小: " + audioPath);
+            }
             // 记录TTS生成时间
             sentence.setEndSynthesis(Instant.now());
 

@@ -98,8 +98,14 @@ public class VoskSttService implements SttService {
             return null;
         }
 
-        // 将原始音频数据转换为WAV格式并保存
-        String fileName = AudioUtils.saveAsWav(audioData);
+        // 将原始音频数据保存为WAV（用于调试）
+        String fileName = null;
+        try {
+            fileName = AudioUtils.saveAsWav(audioData);
+            logger.info("Debug wav saved: {}", fileName);
+        } catch (java.io.IOException e) {
+            logger.warn("保存调试WAV失败（不影响识别流程）: {}", e.getMessage());
+        }
 
         try (Recognizer recognizer = new Recognizer(model, AudioUtils.SAMPLE_RATE)) {
             ByteArrayInputStream audioStream = new ByteArrayInputStream(audioData);

@@ -124,7 +124,7 @@ public class AudioUtils {
      * @param audioData 音频数据
      * @return 文件名
      */
-//    public static void saveAsWav(Path path, byte[] audioData) {
+//    public static void saveAsWav(Path path, byte[] audioData) throws IOException {
 //
 //        // WAV文件参数
 //        int bitsPerSample = 16; // 16位采样
