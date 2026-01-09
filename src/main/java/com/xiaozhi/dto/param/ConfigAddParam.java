@@ -33,7 +33,7 @@ public class ConfigAddParam {
     @Schema(description = "模型类型", example = "chat", allowableValues = {"chat", "vision", "intent", "embedding", "director"})
     private String modelType;
 
-    @Schema(description = "服务提供商", example = "openai", requiredMode = Schema.RequiredMode.REQUIRED, allowableValues = {"openai", "qwen", "coze", "dify", "tencent", "aliyun", "vosk"})
+    @Schema(description = "服务提供商", example = "qwen", requiredMode = Schema.RequiredMode.REQUIRED, allowableValues = {"openai", "qwen", "coze", "dify", "tencent", "aliyun", "vosk"})
     @NotBlank(message = "服务提供商不能为空")
     private String provider;
 
@@ -52,7 +52,7 @@ public class ConfigAddParam {
     @Schema(description = "服务提供商分配的Secret Key", example = "sk_xxxxx")
     private String sk;
 
-    @Schema(description = "服务提供商的API地址", example = "https://api.openai.com/v1")
+    @Schema(description = "服务提供商的API地址", example = "https://dashscope.aliyuncs.com/compatible-mode/v1")
     private String apiUrl;
 
     @Schema(description = "服务提供商状态", example = "1", allowableValues = {"0", "1"})

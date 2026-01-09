@@ -13,7 +13,7 @@ import lombok.Data;
 @Schema(description = "获取模型列表请求参数")
 public class ConfigGetModelsParam {
 
-    @Schema(description = "服务提供商的API地址", example = "https://api.openai.com/v1", requiredMode = Schema.RequiredMode.REQUIRED)
+    @Schema(description = "服务提供商的API地址", example = "https://dashscope.aliyuncs.com/compatible-mode/v1", requiredMode = Schema.RequiredMode.REQUIRED)
     @NotBlank(message = "API地址不能为空")
     private String apiUrl;
 

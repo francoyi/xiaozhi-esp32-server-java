@@ -1,7 +1,6 @@
 package com.xiaozhi.dialogue.llm.factory;
 
 import com.xiaozhi.communication.common.ChatSession;
-import com.xiaozhi.dialogue.llm.providers.OpenAiLlmService;
 import com.xiaozhi.entity.SysConfig;
 import com.xiaozhi.entity.SysDevice;
 import com.xiaozhi.entity.SysRole;
@@ -125,8 +124,13 @@ public class ChatModelFactory {
         }
         
         // 如果没有找到对应的Provider,尝试使用OpenAI Provider作为默认(兼容OpenAI协议)
-        logger.warn("未找到Provider [{}],使用OpenAI协议作为默认Provider", providerName);
-        provider = providers.get("openai");
+        logger.warn("未找到Provider [{}],使用Qwen(OpenAI兼容)作为默认Provider", providerName);
+        provider = providers.get("qwen");
+
+        // 兼容旧配置：如果还配置了 openai，则也尝试走 qwen
+        if (provider == null) {
+            provider = providers.get("qwen");
+        }
         
         if (provider != null) {
             return provider.createChatModel(config, role);

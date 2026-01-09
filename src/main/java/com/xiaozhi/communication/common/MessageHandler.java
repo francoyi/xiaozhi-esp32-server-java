@@ -5,7 +5,7 @@ import com.xiaozhi.communication.server.websocket.WebSocketSession;
 import com.xiaozhi.dialogue.llm.factory.ChatModelFactory;
 import com.xiaozhi.dialogue.llm.memory.Conversation;
 import com.xiaozhi.dialogue.llm.memory.ConversationFactory;
-import com.xiaozhi.dialogue.llm.providers.OpenAiLlmService;
+import com.xiaozhi.dialogue.llm.providers.QwenLlmService;
 import com.xiaozhi.dialogue.llm.tool.ToolsGlobalRegistry;
 import com.xiaozhi.dialogue.llm.tool.ToolsSessionHolder;
 import com.xiaozhi.dialogue.service.*;
@@ -183,7 +183,7 @@ public class MessageHandler {
                                 String endpoint = config.getApiUrl();
                                 String apiKey = config.getApiKey();
 
-                                OpenAiLlmService openAiLlmService = new OpenAiLlmService(endpoint, apiKey, model);
+                                QwenLlmService openAiLlmService = new QwenLlmService(endpoint, apiKey, model);
                                 chatSession.setSupportFunctionCall(openAiLlmService.testFunctionCall());
                             } catch (Exception e) {
                                 logger.error("异步校验 function call 失败", e);

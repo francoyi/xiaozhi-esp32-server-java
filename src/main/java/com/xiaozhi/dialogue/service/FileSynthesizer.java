@@ -28,7 +28,6 @@ public class FileSynthesizer extends ThreadSynthesizer  {
     private final MessageService messageService;
     private final TtsService ttsService;
 
-    // 从配置文件读取TTS相关参数
     @Value("${tts.timeout.ms:10000}")
     private long TTS_TIMEOUT_MS = 10000;
 
@@ -41,35 +40,48 @@ public class FileSynthesizer extends ThreadSynthesizer  {
     @Value("${tts.max.concurrent.per.session:3}")
     private int MAX_CONCURRENT_PER_SESSION = 3;
 
+    // ★ 新增：音频根目录（建议与你的 systemd WorkingDirectory=/opt/xiaozhi/app 配套）
+    @Value("${xiaozhi.audio.dir:/opt/xiaozhi/app/audio}")
+    private String AUDIO_DIR;
+
+    // ★ 新增：短等待参数（专治“3ms 竞态”）
+    @Value("${tts.file.wait.max.ms:500}")
+    private long TTS_FILE_WAIT_MAX_MS;
+
+    @Value("${tts.file.wait.step.ms:50}")
+    private long TTS_FILE_WAIT_STEP_MS;
+
     public FileSynthesizer(ChatSession session, MessageService messageService,
-                       TtsService ttsService, Player player) {
-        super(session,player);
+                           TtsService ttsService, Player player) {
+        super(session, player);
         this.messageService = messageService;
         this.ttsService = ttsService;
     }
 
     @Override
     protected void doSynthesize(Sentence sentence) {
-        // 检查是否已被中断或中止，避免abort后继续请求TTS
         if (Thread.currentThread().isInterrupted() || aborted) {
             return;
         }
 
         String text = sentence.getText4Speech();
-        
+
         try {
-            // TODO 超时须在ttsFactory里设置。
             String audioPath = ttsService.textToSpeech(text);
-            logger.debug("executeTtsTask audioPath:{}", audioPath);
-            java.nio.file.Path p = java.nio.file.Path.of(audioPath);
-            if (!java.nio.file.Files.exists(p) || java.nio.file.Files.size(p) <= 44) {
-                throw new java.io.FileNotFoundException("TTS 返回音频不存在或过小: " + audioPath);
-            }
+            logger.debug("executeTtsTask audioPath(raw):{}", audioPath);
+
+            // ★ 1) 解析绝对路径（优先按 user.dir，其次按配置的 AUDIO_DIR 兜底）
+            Path absPath = resolveAudioPath(audioPath);
+
+            // ★ 2) 短等待：最多 500ms（默认），直到文件存在且大小>44
+            waitForFileReady(absPath, audioPath);
+
             // 记录TTS生成时间
             sentence.setEndSynthesis(Instant.now());
 
-            // 成功生成音频
-            handleTtsSuccess(sentence, audioPath);
+            // ★ 3) 成功后传入 absPath（后续读取文件不再踩相对路径坑）
+            handleTtsSuccess(sentence, audioPath, absPath);
+
         } catch (Exception e) {
             logger.error("TTS任务执行失败 - 句子序号: {}, 提供商: {}, 语音: {}, 原因: {}",
                     sentence.getSeq(), ttsService.getProviderName(), ttsService.getVoiceName(), e.getMessage());
@@ -77,60 +89,116 @@ public class FileSynthesizer extends ThreadSynthesizer  {
         }
     }
 
-    private void handleTtsSuccess(Sentence sentence, String audioPath) {
+    // ★ 新增：把 audio/xxx.mp3 解析成绝对路径
+    private Path resolveAudioPath(String audioPath) {
+        Path p = Path.of(audioPath);
 
-        // 记录日志
+        if (p.isAbsolute()) {
+            return p.normalize();
+        }
+
+        // 常规情况：按 user.dir + 相对路径（你 systemd WorkingDirectory=/opt/xiaozhi/app 就会落到 /opt/xiaozhi/app/audio/xxx）
+        String userDir = System.getProperty("user.dir");
+        Path byUserDir = Path.of(userDir).resolve(p).normalize();
+
+        // 兜底：有些情况下 audioPath 可能是 "xxx.mp3" 或 user.dir 不符合预期
+        // 尝试按 AUDIO_DIR + 文件名兜底（确保落到 /opt/xiaozhi/app/audio）
+        Path byAudioDir = Path.of(AUDIO_DIR).resolve(p.getFileName()).normalize();
+
+        // 优先返回更“像音频目录”的那个
+        if (byUserDir.toString().contains("/audio/")) return byUserDir;
+        return byAudioDir;
+    }
+
+    // ★ 新增：短等待，避免“文件刚生成但尚未落盘”导致 exists=false
+    private void waitForFileReady(Path absPath, String rawPath) throws Exception {
+        long deadline = System.currentTimeMillis() + TTS_FILE_WAIT_MAX_MS;
+
+        long lastSize = -1;
+        int stableCount = 0;
+
+        while (true) {
+            if (Thread.currentThread().isInterrupted() || aborted) {
+                throw new java.lang.InterruptedException("TTS wait interrupted/aborted");
+            }
+
+            if (java.nio.file.Files.exists(absPath)) {
+                long size = java.nio.file.Files.size(absPath);
+
+                // mp3 建议用更合理的阈值
+                if (size >= 1024) {
+                    if (size == lastSize) stableCount++;
+                    else stableCount = 0;
+
+                    // 连续两次相同（≈ 100ms）认为写入完成
+                    if (stableCount >= 2) {
+                        logger.debug("TTS file ready: raw={}, abs={}, size={}, user.dir={}",
+                                rawPath, absPath, size, System.getProperty("user.dir"));
+                        return;
+                    }
+                }
+
+                lastSize = size;
+            }
+
+            if (System.currentTimeMillis() >= deadline) {
+                boolean exists = java.nio.file.Files.exists(absPath);
+                long size = exists ? java.nio.file.Files.size(absPath) : -1;
+                throw new java.io.FileNotFoundException(
+                        "TTS 音频未就绪(超时). raw=" + rawPath +
+                                ", abs=" + absPath +
+                                ", exists=" + exists +
+                                ", size=" + size +
+                                ", user.dir=" + System.getProperty("user.dir")
+                );
+            }
+
+            Thread.sleep(TTS_FILE_WAIT_STEP_MS);
+        }
+    }
+
+
+    // ★ 修改：多传一个 absPath，sentence.setAudio 用 absPath
+    private void handleTtsSuccess(Sentence sentence, String audioPath, Path absPath) {
+
         logger.info("句子音频生成完成 - 序号: {}, 对话ID: {},  语音生成: {}毫秒, 内容: \"{}\"",
                 sentence.getSeq(), sentence.getAssistantTimeMillis(),
                 sentence.getSynthesisDuration(),
                 sentence.getText());
 
         try {
-            // 设置音频路径到句子对象
-            sentence.setAudio(Path.of(audioPath));
-
-            // 标记合成完成
+            // ★ 用绝对路径，确保后续读取一致
+            sentence.setAudio(absPath);
             sentence.setSynthesisCompleted(true);
 
         } catch (Exception e) {
-            logger.error("读取音频文件失败 - 序号: {}, 文件: {}", sentence.getSeq(), audioPath, e);
+            logger.error("读取音频文件失败 - 序号: {}, raw: {}, abs: {}", sentence.getSeq(), audioPath, absPath, e);
             handleTtsFailure(sentence, "读取音频文件失败: " + e.getMessage());
             return;
         }
 
-        // 检查是否已被中断或中止，避免abort后仍添加旧句子
         if (Thread.currentThread().isInterrupted() || aborted) {
             logger.debug("TTS任务已被中止，跳过句子添加 - 序号: {}", sentence.getSeq());
             return;
         }
 
-        // 确保当前Synthesizer仍然是session中的活跃Synthesizer
-        // 防止abort后新对话创建了新的Synthesizer，但旧的重试句子仍然完成并尝试播放
         if (chatSession.getSynthesizer() != this) {
             logger.debug("当前Synthesizer已被替换，跳过句子播放 - 序号: {}", sentence.getSeq());
             return;
         }
 
-        // 发送到客户端
         player.append(sentence);
         player.play();
-        // 从队列中移除已处理的句子
         removeSentence(sentence);
     }
 
-    /**
-     * 处理TTS失败
-     */
     private void handleTtsFailure(Sentence sentence, String reason) {
-        // 检查是否已被中止，避免abort后继续重试
         if (aborted) {
             return;
         }
 
-        // TODO 考虑创建新的任务对象而不是重用原对象，避免数据污染
         sentence.retryCount++;
         sentence.isRetry = true;
-        // 异常或失败，发送类似心跳包，避免设备端误判为会话终止
         messageService.sendEmotion(chatSession, "happy");
 
         if (sentence.retryCount <= MAX_RETRY_COUNT) {
@@ -138,14 +206,11 @@ public class FileSynthesizer extends ThreadSynthesizer  {
             logger.info("TTS任务重试 - 序号: {}, 重试次数: {}/{}, 内容: \"{}\", 原因: {}",
                     sentence.getSeq(), sentence.retryCount, MAX_RETRY_COUNT, sentence.getText(), reason);
 
-            // 没必要延迟重试，因为对话的时间是很有限的。如果延时，那这句话也就赶不上播放速度了，也就等于放弃这句话了。
             doSynthesize(sentence);
         } else {
-            // 超过最大重试次数，标记为失败
             logger.error("TTS任务失败 - 序号: {}, 重试次数: {}/{}, 已达最大重试次数, 原因: {}",
                     sentence.getSeq(), sentence.retryCount, MAX_RETRY_COUNT, reason);
 
-            // 即使失败也标记为准备好，以便队列继续处理
             sentence.setAudio(null);
             sentence.setEndSynthesis(Instant.now());
         }

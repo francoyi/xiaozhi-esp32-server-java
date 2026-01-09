@@ -74,7 +74,7 @@ public class SysConfig extends Base<SysConfig> {
     /**
      * 服务提供商 (openai\quen\vosk\aliyun\tencent等)
      */
-    @Schema(description = "服务提供商 (openai\\quen\\vosk\\aliyun\\tencent等)")
+    @Schema(description = "服务提供商 (openai\\qwen\\vosk\\aliyun\\tencent等)")
     private String provider;
 
     @Schema(description = "服务提供商分配的AppId")
